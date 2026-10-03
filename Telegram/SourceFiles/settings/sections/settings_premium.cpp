@@ -1868,7 +1868,7 @@ void StartPremiumPayment(
 			.startAutoSubmit = true,
 		});
 	} else if (!slug.isEmpty()) {
-		UrlClickHandler::Open("https://opengra.me/$" + slug);
+		UrlClickHandler::Open("https://voxgram.fun/$" + slug);
 	}
 }
 

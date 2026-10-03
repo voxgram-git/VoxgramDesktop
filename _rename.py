@@ -19,14 +19,14 @@ def replace_in_value(line: str) -> str:
     prefix, value, suffix = m.group(1), m.group(2), m.group(3)
 
     # URLs (longest patterns first)
-    value = value.replace("telegram.org", "opengra.me")
-    value = value.replace("https://t.me/", "https://opengra.me/")
-    value = re.sub(r'(?<!\w)t\.me/', 'opengra.me/', value)
+    value = value.replace("telegram.org", "voxgram.fun")
+    value = value.replace("https://t.me/", "https://voxgram.fun/")
+    value = re.sub(r'(?<!\w)t\.me/', 'voxgram.fun/', value)
 
     # Brand
-    value = value.replace("Telegram Desktop", "Opengram Desktop")
-    value = re.sub(r'\bTelegram\b', 'Opengram', value)
-    value = re.sub(r'\btelegram\b', 'opengram', value)
+    value = value.replace("Telegram Desktop", "Voxgram Desktop")
+    value = re.sub(r'\bTelegram\b', 'Voxgram', value)
+    value = re.sub(r'\btelegram\b', 'voxgram', value)
 
     return prefix + '"' + value + '"' + suffix
 
@@ -40,6 +40,6 @@ with open("lang.strings", "r", encoding="utf-8") as f:
     new = f.read()
 
 print("Telegram remaining:", new.count("Telegram"))
-print("Opengram count:   ", new.count("Opengram"))
+print("Voxgram count:   ", new.count("Voxgram"))
 print("t.me remaining:   ", new.count("t.me"))
-print("opengra.me count: ", new.count("opengra.me"))
+print("voxgram.fun count: ", new.count("voxgram.fun"))

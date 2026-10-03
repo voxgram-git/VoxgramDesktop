@@ -1854,7 +1854,7 @@ QString TryConvertUrlToLocal(QString url) {
 		if (name.size() > 1 && name != "www") {
 			const auto result = TryConvertUrlToLocal(
 				subdomainMatch->captured(1)
-				+ "opengra.me/"
+				+ "voxgram.fun/"
 				+ name
 				+ subdomainMatch->captured(3)
 				+ subdomainMatch->captured(4));

@@ -2959,7 +2959,7 @@ object_ptr<Ui::BoxContent> PopularAppsAboutBox(
 			lt_bot,
 			rpl::single(tr::link(
 				u"@botfather"_q,
-				u"https://opengra.me/botfather"_q)),
+				u"https://voxgram.fun/botfather"_q)),
 			lt_link,
 			tr::lng_popular_apps_info_here(
 				tr::url(tr::lng_popular_apps_info_url(tr::now))),

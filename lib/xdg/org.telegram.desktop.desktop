@@ -1,15 +1,15 @@
 [Desktop Entry]
-Name=Opengram
+Name=Voxgram
 Comment=New era of messaging
-TryExec=Opengram
-Exec=Opengram -- %U
-Icon=org.opengram.desktop
+TryExec=Voxgram
+Exec=Voxgram -- %U
+Icon=org.telegram.desktop
 Terminal=false
-StartupWMClass=OpengramDesktop
+StartupWMClass=VoxgramDesktop
 Type=Application
 Categories=Chat;Network;InstantMessaging;Qt;
-MimeType=x-scheme-handler/opengram;x-scheme-handler/tonsite;
-Keywords=opengram;chat;im;messaging;messenger;sms;
+MimeType=x-scheme-handler/vg;x-scheme-handler/opengram;x-scheme-handler/tonsite;
+Keywords=voxgram;chat;im;messaging;messenger;sms;
 Actions=quit;
 DBusActivatable=true
 SingleMainWindow=true
@@ -17,6 +17,6 @@ X-GNOME-UsesNotifications=true
 X-GNOME-SingleWindow=true
 
 [Desktop Action quit]
-Exec=Opengram -quit
-Name=Quit Opengram
+Exec=Voxgram -quit
+Name=Quit Voxgram
 Icon=application-exit

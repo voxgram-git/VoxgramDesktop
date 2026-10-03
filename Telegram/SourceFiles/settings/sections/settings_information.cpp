@@ -542,7 +542,7 @@ void SetupRows(
 		tr::lng_settings_username_label(),
 		std::move(empty)
 	) | rpl::map([](const QString &label, bool empty) {
-		return empty ? "opengra.me/username" : label;
+		return empty ? "voxgram.fun/username" : label;
 	});
 	auto usernameValue = rpl::combine(
 		std::move(username),

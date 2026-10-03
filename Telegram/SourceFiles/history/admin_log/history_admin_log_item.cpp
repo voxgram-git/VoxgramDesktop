@@ -442,7 +442,7 @@ QString GenerateInviteLinkText(const MTPExportedChatInvite &data) {
 		u"https://"_q,
 		QString()
 	).replace(
-		u"opengra.me/joinchat/"_q,
+		u"voxgram.fun/joinchat/"_q,
 		QString()
 	) : label;
 }

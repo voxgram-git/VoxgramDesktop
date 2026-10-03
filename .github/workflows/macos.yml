@@ -34,15 +34,15 @@ jobs:
           submodules: recursive
           path: ${{ env.REPO_NAME }}
 
-      - name: Apply Opengram RSA public key.
+      - name: Apply Voxgram RSA public key.
         env:
-          OPENGRAM_PUBKEY: ${{ secrets.OPENGRAM_PUBKEY }}
+          VOXGRAM_PUBKEY: ${{ secrets.VOXGRAM_PUBKEY }}
         run: |
           cd "$REPO_NAME"
-          if [ -z "$OPENGRAM_PUBKEY" ]; then
-            echo "::warning::OPENGRAM_PUBKEY secret is not set — build won't connect to the server."
+          if [ -z "$VOXGRAM_PUBKEY" ]; then
+            echo "::warning::VOXGRAM_PUBKEY secret is not set — build won't connect to the server."
           else
-            printf '%s\n' "$OPENGRAM_PUBKEY" > pubkey.asc
+            printf '%s\n' "$VOXGRAM_PUBKEY" > pubkey.asc
             python3 _apply_pubkey.py
             echo "Public key applied."
           fi
@@ -74,7 +74,7 @@ jobs:
       - name: Libraries.
         run: ./$REPO_NAME/Telegram/build/prepare/mac.sh silent
 
-      - name: Build Opengram Desktop.
+      - name: Build Voxgram Desktop.
         env:
           TDESKTOP_API_ID: ${{ secrets.TDESKTOP_API_ID || '17349' }}
           TDESKTOP_API_HASH: ${{ secrets.TDESKTOP_API_HASH || '344583e45741c457fe1862106095a5eb' }}
@@ -97,25 +97,25 @@ jobs:
         run: |
           cd $REPO_NAME/out/Release
           mkdir artifact
-          if [ -d "Opengram.app" ]; then
-            mv Opengram.app artifact/
+          if [ -d "Voxgram.app" ]; then
+            mv Voxgram.app artifact/
           elif [ -d "Telegram.app" ]; then
-            mv Telegram.app artifact/Opengram.app
+            mv Telegram.app artifact/Voxgram.app
           fi
           [ -f Updater ] && mv Updater artifact/
 
           cd artifact
-          tar -cJf "opengram-macos-${{ matrix.arch }}.tar.xz" Opengram.app Updater 2>/dev/null || tar -cJf "opengram-macos-${{ matrix.arch }}.tar.xz" Opengram.app
+          tar -cJf "voxgram-macos-${{ matrix.arch }}.tar.xz" Voxgram.app Updater 2>/dev/null || tar -cJf "voxgram-macos-${{ matrix.arch }}.tar.xz" Voxgram.app
 
       - uses: actions/upload-artifact@v4
         name: Upload artifact.
         with:
-          name: opengram-macos-${{ matrix.arch }}
-          path: ${{ env.REPO_NAME }}/out/Release/artifact/opengram-macos-${{ matrix.arch }}.tar.xz
+          name: voxgram-macos-${{ matrix.arch }}
+          path: ${{ env.REPO_NAME }}/out/Release/artifact/voxgram-macos-${{ matrix.arch }}.tar.xz
           retention-days: 30
 
       - name: Attach to release.
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.REPO_NAME }}/out/Release/artifact/opengram-macos-${{ matrix.arch }}.tar.xz
+          files: ${{ env.REPO_NAME }}/out/Release/artifact/voxgram-macos-${{ matrix.arch }}.tar.xz

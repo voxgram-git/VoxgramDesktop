@@ -1300,7 +1300,7 @@ void CheckPollVoteNotificationSchedule(
 }
 
 [[nodiscard]] TextWithEntities UnsupportedMessageText() {
-	const auto siteLink = u"https://opengra.me"_q;
+	const auto siteLink = u"https://voxgram.fun"_q;
 	auto result = TextWithEntities{
 		tr::lng_message_unsupported(tr::now, lt_link, siteLink)
 	};
@@ -1319,7 +1319,7 @@ HistoryMessageMarkupData UnsupportedMessageMarkup() {
 		Button::Type::Url,
 		tr::lng_update_telegram(tr::now),
 		Button::Visual(),
-		QByteArray("https://opengra.me"));
+		QByteArray("https://voxgram.fun"));
 	markup.rows.push_back(std::move(row));
 	return markup;
 }

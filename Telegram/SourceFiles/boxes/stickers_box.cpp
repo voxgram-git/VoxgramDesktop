@@ -2187,7 +2187,7 @@ void StickersBox::Inner::AddressField::correctValue(
 		u"www.t.me/"_q,
 		u"www.telegram.me/"_q,
 		u"www.telegram.dog/"_q,
-		u"opengra.me/"_q,
+		u"voxgram.fun/"_q,
 		u"telegram.me/"_q,
 		u"telegram.dog/"_q,
 		u"addstickers/"_q,

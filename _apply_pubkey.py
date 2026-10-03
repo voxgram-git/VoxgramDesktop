@@ -29,7 +29,7 @@ with open(CPP_PATH, "r", encoding="utf-8") as f:
 # Replace both key blocks (test + prod use the same key since we have one server)
 placeholder_re = re.compile(
     r'"\\\n-----BEGIN RSA PUBLIC KEY-----\\n\\\n'
-    r'(?:OPENGRAM_PUBKEY_LINE_\d+_HERE\\n\\\n)+'
+    r'(?:VOXGRAM_PUBKEY_LINE_\d+_HERE\\n\\\n)+'
     r'-----END RSA PUBLIC KEY-----"',
     re.DOTALL,
 )

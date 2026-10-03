@@ -61,7 +61,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "media/view/media_view_open_common.h"
 #include "mtproto/mtproto_dc_options.h"
 #include "mtproto/mtproto_config.h"
-#include "opengram/opengram_custom_server.h"
 #include "media/audio/media_audio_track.h"
 #include "media/player/media_player_instance.h"
 #include "media/player/media_player_float.h"
@@ -381,16 +380,6 @@ void Application::run() {
 	}, _lifetime);
 
 	DEBUG_LOG(("Application Info: window created..."));
-
-	// Тяну динамические адреса DC с https://api.opengra.me/v1/config
-	// и применяю их в built-in конфиг ДО startDomain() (там создаётся
-	// MTP::Instance и идёт первый коннект). DcOptions::loadFromFile()
-	// внутри ставит _immutable=true — серверный help.getConfig потом
-	// не сможет перезаписать адреса, а вшитый RSA-ключ не трогается.
-	// Любой провал (нет сети, нет кэша) безопасен: остаются built-in
-	// адреса и старт продолжается как обычно.
-	Opengram::ApplyCustomServerConfig(
-		&fallbackProductionConfig().dcOptions());
 
 	startDomain();
 	startTray();
@@ -1171,9 +1160,9 @@ void Application::checkStartUrls() {
 
 bool Application::openLocalUrl(const QString &url, QVariant context) {
 	const auto urlTrimmed = url.trimmed();
-	// Accept both opengram:// (our registered scheme) and tg://
-	// (so messages containing legacy tg:// links keep working inside the app).
-	const auto protocols = { u"opengram://"_q, u"tg://"_q };
+	// vg:// is our registered scheme; opengram:// and tg:// are still
+	// accepted so legacy links keep working inside the app.
+	const auto protocols = { u"vg://"_q, u"opengram://"_q, u"tg://"_q };
 	if (!passcodeLocked()) {
 		for (const auto &protocol : protocols) {
 			if (urlTrimmed.startsWith(protocol, Qt::CaseInsensitive)) {
@@ -1190,8 +1179,14 @@ bool Application::openLocalUrl(const QString &url, QVariant context) {
 			}
 		}
 	}
-	if (urlTrimmed.startsWith(u"opengram://"_q, Qt::CaseInsensitive)) {
-		return openCustomUrl("opengram://", LocalUrlHandlers(), url, context);
+	for (const auto &protocol : { u"vg://"_q, u"opengram://"_q }) {
+		if (urlTrimmed.startsWith(protocol, Qt::CaseInsensitive)) {
+			return openCustomUrl(
+				protocol,
+				LocalUrlHandlers(),
+				url,
+				context);
+		}
 	}
 	return openCustomUrl("tg://", LocalUrlHandlers(), url, context);
 }
@@ -1201,7 +1196,7 @@ bool Application::openInternalUrl(const QString &url, QVariant context) {
 }
 
 QString Application::changelogLink() const {
-	return u"https://github.com/opengram-server/tdesktop/releases"_q;
+	return u"https://github.com/voxgram-git/VoxgramDesktop/releases"_q;
 }
 
 bool Application::openCustomUrl(
@@ -1905,16 +1900,22 @@ void Application::RegisterUrlScheme() {
 		? u"-workdir \"%1\""_q.arg(cWorkingDir())
 		: QString();
 
-	base::Platform::RegisterUrlScheme(base::Platform::UrlSchemeDescriptor{
-		.executable = Platform::ExecutablePathForShortcuts(),
-		.arguments = arguments,
-		.protocol = u"opengram"_q,
-		.protocolName = u"Opengram Link"_q,
-		.shortAppName = u"opengram-desktop"_q,
-		.longAppName = QCoreApplication::applicationName(),
-		.displayAppName = AppName.utf16(),
-		.displayAppDescription = AppName.utf16(),
-	});
+	// vg:// is the main scheme, opengram:// is kept so links from the
+	// previous Opengram builds still open here. tg:// is left to
+	// Telegram Desktop if it is installed alongside.
+	for (const auto &protocol : { u"vg"_q, u"opengram"_q }) {
+		base::Platform::RegisterUrlScheme(
+			base::Platform::UrlSchemeDescriptor{
+				.executable = Platform::ExecutablePathForShortcuts(),
+				.arguments = arguments,
+				.protocol = protocol,
+				.protocolName = u"Voxgram Link"_q,
+				.shortAppName = u"voxgram-desktop"_q,
+				.longAppName = QCoreApplication::applicationName(),
+				.displayAppName = AppName.utf16(),
+				.displayAppDescription = AppName.utf16(),
+			});
+	}
 }
 
 bool IsAppLaunched() {

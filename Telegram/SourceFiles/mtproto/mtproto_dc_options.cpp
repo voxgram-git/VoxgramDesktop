@@ -56,7 +56,7 @@ const BuiltInDc kBuiltInDcsIPv6Test[] = {
 	{ 3, "192.168.0.96", 20443 }
 };
 
-// Opengram public RSA key. Replace with your server's pubkey.asc contents
+// Voxgram public RSA key. Replace with your server's pubkey.asc contents
 // (get it with: cat /opt/ogram/data/secrets/pubkey.asc)
 const char *kTestPublicRSAKeys[] = { "\
 -----BEGIN RSA PUBLIC KEY-----\n\

@@ -46,7 +46,7 @@ namespace {
 
 [[nodiscard]] QString ComputeApiUrl(PaymentConfiguration configuration) {
 	const auto url = configuration.tokenizeUrl;
-	// Opengram uses the smartglocal native_provider as a thin shim around
+	// Voxgram uses the smartglocal native_provider as a thin shim around
 	// our self-hosted tokenize endpoint, so we honour any https URL the
 	// server hands us — the upstream `.smart-glocal.com/cds/v1/tokenize/card`
 	// suffix lock would force every card through real Smart Glocal.

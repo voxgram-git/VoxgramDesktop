@@ -116,7 +116,7 @@ void ConfigLoader::enumerate() {
 }
 
 void ConfigLoader::refreshSpecialLoader() {
-	// У opengram-сервера свои DC (см. ENV DC_*_ADDRESS_*_IP в ogram.service);
+	// У voxgram-сервера свои DC (см. ENV DC_*_ADDRESS_*_IP в ogram.service);
 	// штатный SpecialConfigRequest ходит через зашифрованный DNS-конфиг к
 	// официальным Telegram-овским «special endpoints» (вроде 194.221.250.50,
 	// Aurora DC4). Клиент берёт их за валидные fallback'и, лезет туда с
@@ -157,11 +157,11 @@ void ConfigLoader::addSpecialEndpoint(
 		const std::string &ip,
 		int port,
 		bytes::const_span secret) {
-	// Specifically для opengram-форка: отбрасываю любые "special endpoints"
+	// Specifically для voxgram-форка: отбрасываю любые "special endpoints"
 	// (см. refreshSpecialLoader выше — там объяснение). Раньше через них
 	// клиент уходил на 194.221.250.50 (оф. TG DC4), что приводило к
 	// каскаду таймаутов и крашу.
-	DEBUG_LOG(("MTP Info: Special endpoint suppressed (opengram-fork), '%1:%2' for dc%3"
+	DEBUG_LOG(("MTP Info: Special endpoint suppressed (voxgram-fork), '%1:%2' for dc%3"
 		).arg(ip.c_str()).arg(port).arg(dcId));
 }
 
