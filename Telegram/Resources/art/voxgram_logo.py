@@ -149,9 +149,11 @@ def main():
 
     # Intro screen cover: white bubble mask, colored by the style.
     l, t, r, b = BUBBLE_BOX
+    # codegen_style requires @2x/@3x to be exact multiples of 1x.
+    width = round(120 * (r - l) / (b - t))
     for scale, suffix in ((1, ''), (2, '@2x'), (3, '@3x')):
         h = 120 * scale
-        w = round(h * (r - l) / (b - t))
+        w = width * scale
         save(render(glyph, w, h),
              os.path.join(ICONS, f'intro_voxgram_logo{suffix}.png'))
 
