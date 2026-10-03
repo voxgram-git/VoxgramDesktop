@@ -1448,8 +1448,6 @@ PRIVATE
     mtproto/special_config_request.cpp
     mtproto/special_config_request.h
     mtproto/type_utils.h
-    opengram/opengram_custom_server.cpp
-    opengram/opengram_custom_server.h
     overview/overview_checkbox.cpp
     overview/overview_checkbox.h
     overview/overview_layout.cpp
@@ -2084,12 +2082,12 @@ if (build_macstore)
     )
 else()
     if (CMAKE_GENERATOR STREQUAL Xcode)
-        set(bundle_identifier "me.opengra.Opengram$<$<CONFIG:Debug>:Debug>")
+        set(bundle_identifier "fun.voxgram.Voxgram$<$<CONFIG:Debug>:Debug>")
     else()
-        set(bundle_identifier "me.opengra.Opengram")
+        set(bundle_identifier "fun.voxgram.Voxgram")
     endif()
     set(bundle_entitlements "Telegram.entitlements")
-    set(output_name "Opengram")
+    set(output_name "Voxgram")
 endif()
 
 if (CMAKE_GENERATOR STREQUAL Xcode)

@@ -1,5 +1,5 @@
 """
-Заменяет t.me/https://t.me в C++ исходниках tdesktop на opengra.me.
+Заменяет t.me/https://t.me в C++ исходниках tdesktop на voxgram.fun.
 НЕ трогает tg:// (URL-схема приложения — ломать нельзя).
 """
 import os
@@ -10,13 +10,13 @@ ROOT = r"C:\tdesktop\Telegram\SourceFiles"
 # Паттерны безопасные — только "t.me..." в строковых литералах
 # (внутри Qt _q строк или обычных "" строк).
 # Не трогаем:
-#  - telegram.me (legacy) можно заменить на opengra.me
+#  - telegram.me (legacy) можно заменить на voxgram.fun
 #  - t.me как часть имени переменной
 PATTERNS = [
-    (re.compile(r'"https://t\.me/'), '"https://opengra.me/'),
-    (re.compile(r'"t\.me/'),         '"opengra.me/'),
-    (re.compile(r"'https://t\.me/"), "'https://opengra.me/"),
-    (re.compile(r"'t\.me/"),         "'opengra.me/"),
+    (re.compile(r'"https://t\.me/'), '"https://voxgram.fun/'),
+    (re.compile(r'"t\.me/'),         '"voxgram.fun/'),
+    (re.compile(r"'https://t\.me/"), "'https://voxgram.fun/"),
+    (re.compile(r"'t\.me/"),         "'voxgram.fun/"),
     # Ubuntu/GitHub/issue tracker URLs оставляем как есть — они в комментариях.
 ]
 

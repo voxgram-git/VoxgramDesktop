@@ -1,9 +1,9 @@
-#define MyAppShortName "Opengram"
-#define MyAppName "Opengram Desktop"
-#define MyAppPublisher "Opengram"
-#define MyAppURL "https://opengra.me"
-#define MyAppExeName "Opengram.exe"
-#define MyAppId "743F67C9-75F5-4451-A59F-9FB7BBCFADF4"
+#define MyAppShortName "Voxgram"
+#define MyAppName "Voxgram Desktop"
+#define MyAppPublisher "Voxgram"
+#define MyAppURL "https://voxgram.fun"
+#define MyAppExeName "Voxgram.exe"
+#define MyAppId "F35DD0AE-9A76-4DC4-9F46-C25CD709E2B5"
 #define CurrentYear GetDateTimeString('yyyy','','')
 
 [Setup]
@@ -24,7 +24,7 @@ AllowNoIcons=yes
 OutputDir={#ReleasePath}
 SetupIconFile={#SourcePath}..\Resources\art\icon256.ico
 UninstallDisplayName={#MyAppName}
-UninstallDisplayIcon={app}\Opengram.exe
+UninstallDisplayIcon={app}\Voxgram.exe
 Compression=lzma
 SolidCompression=yes
 DisableStartupPrompt=yes
@@ -70,7 +70,7 @@ Name: "ua";      MessagesFile: "compiler:Languages\Ukrainian.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-Source: "{#ReleasePath}\Opengram.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#ReleasePath}\Voxgram.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ReleasePath}\Updater.exe"; DestDir: "{app}"; Flags: ignoreversion
 #if MyBuildTarget != "winarm"
 Source: "{#ReleasePath}\{#ModulesFolder}\d3d\d3dcompiler_47.dll"; DestDir: "{app}\{#ModulesFolder}\d3d"; Flags: ignoreversion

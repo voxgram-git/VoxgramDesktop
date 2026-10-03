@@ -4,7 +4,7 @@ Release/
 /ThirdParty/
 /Telegram/build/target
 
-# Opengram rebrand artefacts
+# Voxgram rebrand artefacts
 pubkey.asc
 lang.strings.bak
 /Telegram/Resources/langs/lang.strings.bak

@@ -70,16 +70,16 @@ jobs:
           submodules: recursive
           path: ${{ env.TBUILD }}\${{ env.REPO_NAME }}
 
-      - name: Apply Opengram RSA public key.
+      - name: Apply Voxgram RSA public key.
         shell: bash
         env:
-          OPENGRAM_PUBKEY: ${{ secrets.OPENGRAM_PUBKEY }}
+          VOXGRAM_PUBKEY: ${{ secrets.VOXGRAM_PUBKEY }}
         run: |
           cd "$TBUILD/$REPO_NAME"
-          if [ -z "$OPENGRAM_PUBKEY" ]; then
-            echo "::warning::OPENGRAM_PUBKEY secret is not set — build won't connect to the server."
+          if [ -z "$VOXGRAM_PUBKEY" ]; then
+            echo "::warning::VOXGRAM_PUBKEY secret is not set — build won't connect to the server."
           else
-            printf '%s\n' "$OPENGRAM_PUBKEY" > pubkey.asc
+            printf '%s\n' "$VOXGRAM_PUBKEY" > pubkey.asc
             python _apply_pubkey.py
             echo "Public key applied."
           fi
@@ -97,8 +97,8 @@ jobs:
           echo "$SDK" >> CACHE_KEY.txt
           echo "CACHE_KEY=$(sha256sum CACHE_KEY.txt | awk '{ print $1 }')" >> $GITHUB_ENV
 
-          git config --global user.email "ci@opengra.me"
-          git config --global user.name "Opengram CI"
+          git config --global user.email "ci@voxgram.fun"
+          git config --global user.name "Voxgram CI"
 
       - uses: ilammy/msvc-dev-cmd@v1
         name: Native Tools Command Prompt.
@@ -258,7 +258,7 @@ jobs:
         # QCheckedInt::operator+ / -* / etc. — bypassing any "policy" template
         # arg, so the assert fires regardless of CMAKE_BUILD_TYPE and regardless
         # of whether the code chose AssertReportPolicy or IgnoreOverflowPolicy.
-        # In Opengram this stops the emoji-status picker dead (__fastfail at
+        # In Voxgram this stops the emoji-status picker dead (__fastfail at
         # qcheckedint_impl.h:69). We neutralise Q_ASSERT_X / Q_ASSERT for the
         # scope of this single header by wrapping it with push_macro/pop_macro:
         # asserts in the rest of Qt and tdesktop are untouched, only the int
@@ -272,7 +272,7 @@ jobs:
           if (-not $hdr) {
             Write-Host "::warning::qcheckedint_impl.h not found under $env:LibrariesPath - Qt 6.11 layout may have changed, skipping patch"
           } else {
-            $marker = '/* opengram-overflow-asserts-disabled */'
+            $marker = '/* voxgram-overflow-asserts-disabled */'
             $content = Get-Content -Raw -LiteralPath $hdr.FullName
             if ($content.Contains($marker)) {
               Write-Host "Header already patched at $($hdr.FullName) - skipping"
@@ -364,11 +364,11 @@ jobs:
             ${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
           key: ${{ runner.OS }}-x64_x86-qt6-v2-${{ env.CACHE_KEY }}-${{ github.run_id }}-${{ github.run_attempt }}
 
-      - name: Build Opengram Desktop.
+      - name: Build Voxgram Desktop.
         env:
           # Repo secrets, fall back to public test credentials. Test creds
           # are rate-limited on the official Telegram backend but are fine
-          # against our own opengra.me server.
+          # against our own voxgram.fun server.
           TDESKTOP_API_ID: ${{ secrets.TDESKTOP_API_ID || '17349' }}
           TDESKTOP_API_HASH: ${{ secrets.TDESKTOP_API_HASH || '344583e45741c457fe1862106095a5eb' }}
         run: |
@@ -399,8 +399,8 @@ jobs:
           set OUT=%TBUILD%\%REPO_NAME%\out\Release
           set QTBIN=%LibrariesPath%\Qt-6.11.0\bin
           mkdir artifact
-          if exist %OUT%\Opengram.exe move %OUT%\Opengram.exe artifact\
-          if exist %OUT%\Telegram.exe move %OUT%\Telegram.exe artifact\Opengram.exe
+          if exist %OUT%\Voxgram.exe move %OUT%\Voxgram.exe artifact\
+          if exist %OUT%\Telegram.exe move %OUT%\Telegram.exe artifact\Voxgram.exe
           if exist %OUT%\Updater.exe move %OUT%\Updater.exe artifact\
           if exist "%QTBIN%" (
               for %%f in ("%QTBIN%\icu*.dll" "%QTBIN%\icudt*.dll" "%QTBIN%\icuin*.dll" "%QTBIN%\icuuc*.dll") do (
@@ -412,7 +412,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         name: Upload artifact.
         with:
-          name: opengram-windows-x86
+          name: voxgram-windows-x86
           path: artifact\
           retention-days: 30
 

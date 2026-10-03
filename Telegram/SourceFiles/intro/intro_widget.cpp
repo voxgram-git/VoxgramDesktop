@@ -120,7 +120,7 @@ Widget::Widget(
 
 	setupStep();
 
-	// Opengram: маленькая ссылка-кнопка под «Start Messaging».
+	// Voxgram: маленькая ссылка-кнопка под «Start Messaging».
 	createSupportLink();
 
 	fixOrder();
@@ -323,7 +323,7 @@ void Widget::createSupportLink() {
 		object_ptr<Ui::LinkButton>(this, u"Поддержать проект"_q));
 	_support->hide(anim::type::instant);
 	_support->entity()->setClickedCallback([=] {
-		File::OpenUrl(u"https://opengra.me/donate"_q);
+		File::OpenUrl(u"https://voxgram.fun/donate"_q);
 	});
 	_support->toggle(
 		!_resetAccount && !_terms && _nextShown,

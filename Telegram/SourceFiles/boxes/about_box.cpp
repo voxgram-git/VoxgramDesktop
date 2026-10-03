@@ -63,7 +63,7 @@ rpl::producer<TextWithEntities> Text3() {
 } // namespace
 
 void AboutBox(not_null<Ui::GenericBox*> box) {
-	box->setTitle(u"Opengram Desktop"_q);
+	box->setTitle(u"Voxgram Desktop"_q);
 
 	auto layout = box->verticalLayout();
 
@@ -82,7 +82,7 @@ void AboutBox(not_null<Ui::GenericBox*> box) {
 			st::boxRowPadding.bottom()));
 	version->setClickedCallback([=] {
 		if (cRealAlphaVersion()) {
-			auto url = u"https://opengra.me/"_q;
+			auto url = u"https://voxgram.fun/"_q;
 			if (Platform::IsWindows32Bit()) {
 				url += u"win/%1.zip"_q;
 			} else if (Platform::IsWindows64Bit()) {
@@ -132,7 +132,7 @@ void AboutBox(not_null<Ui::GenericBox*> box) {
 }
 
 QString telegramFaqLink() {
-	const auto result = u"https://opengra.me/faq"_q;
+	const auto result = u"https://voxgram.fun/faq"_q;
 	const auto langpacked = [&](const char *language) {
 		return result + '/' + language;
 	};

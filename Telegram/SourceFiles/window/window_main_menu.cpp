@@ -384,8 +384,8 @@ MainMenu::MainMenu(
 	parentResized();
 
 	_telegram->setMarkedText(tr::link(
-		u"Opengram Desktop"_q,
-		u"https://opengra.me"_q));
+		u"Voxgram Desktop"_q,
+		u"https://voxgram.fun"_q));
 	_telegram->setLinksTrusted();
 	_version->setMarkedText(
 		tr::link(

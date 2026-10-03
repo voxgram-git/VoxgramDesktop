@@ -263,10 +263,10 @@ QString LinkRow::generateName() {
 		u"https://"_q,
 		QString()
 	).replace(
-		u"opengra.me/+"_q,
+		u"voxgram.fun/+"_q,
 		QString()
 	).replace(
-		u"opengra.me/joinchat/"_q,
+		u"voxgram.fun/joinchat/"_q,
 		QString()
 	);
 }

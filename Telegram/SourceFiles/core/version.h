@@ -18,10 +18,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #endif // TDESKTOP_ALLOW_CLOSED_ALPHA
 
 // used in Updater.cpp and Setup.iss for Windows
-constexpr auto AppId = "{743F67C9-75F5-4451-A59F-9FB7BBCFADF4}"_cs;
-constexpr auto AppNameOld = "Opengram Win (Unofficial)"_cs;
-constexpr auto AppName = "Opengram Desktop"_cs;
-constexpr auto AppFile = "Opengram"_cs;
+constexpr auto AppId = "{F35DD0AE-9A76-4DC4-9F46-C25CD709E2B5}"_cs;
+constexpr auto AppNameOld = "Voxgram Win (Unofficial)"_cs;
+constexpr auto AppName = "Voxgram Desktop"_cs;
+constexpr auto AppFile = "Voxgram"_cs;
 constexpr auto AppVersion = 6007006;
 constexpr auto AppVersionStr = "6.7.6";
 constexpr auto AppBetaVersion = false;

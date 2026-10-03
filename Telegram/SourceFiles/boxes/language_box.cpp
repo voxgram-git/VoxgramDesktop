@@ -428,7 +428,7 @@ bool Rows::hasMenu(not_null<const Row*> row) const {
 }
 
 void Rows::share(not_null<const Row*> row) const {
-	const auto link = u"https://opengra.me/setlanguage/"_q + row->data.id;
+	const auto link = u"https://voxgram.fun/setlanguage/"_q + row->data.id;
 	QGuiApplication::clipboard()->setText(link);
 	Ui::Toast::Show(tr::lng_username_copied(tr::now));
 }

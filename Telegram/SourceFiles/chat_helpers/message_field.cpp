@@ -540,7 +540,7 @@ auto InitMessageFieldHandlers(MessageFieldHandlersArgs &&args)
 }
 
 [[nodiscard]] bool IsGoodFactcheckUrl(QStringView url) {
-	return url.startsWith(u"opengra.me/"_q) || url.startsWith(u"https://opengra.me/"_q);
+	return url.startsWith(u"voxgram.fun/"_q) || url.startsWith(u"https://voxgram.fun/"_q);
 }
 
 [[nodiscard]] Fn<bool(
