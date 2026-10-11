@@ -29,6 +29,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/sticker_set_box.h"
 #include "base/unixtime.h"
 #include "core/application.h"
+#include "core/local_url_handlers.h"
 #include "core/click_handler_types.h"
 #include "main/main_session.h"
 #include "window/notifications_manager.h"
@@ -417,7 +418,7 @@ QString PublicJoinLink() {
 
 QString ExtractInviteLink(const MTPExportedChatInvite &data) {
 	return data.match([&](const MTPDchatInviteExported &data) {
-		return qs(data.vlink());
+		return Core::VoxgramLinkFromServer(qs(data.vlink()));
 	}, [&](const MTPDchatInvitePublicJoinRequests &data) {
 		return PublicJoinLink();
 	});

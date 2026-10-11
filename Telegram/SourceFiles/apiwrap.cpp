@@ -59,6 +59,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_history_messages.h"
 #include "core/core_cloud_password.h"
 #include "core/application.h"
+#include "core/local_url_handlers.h"
 #include "base/unixtime.h"
 #include "base/random.h"
 #include "base/call_delayed.h"
@@ -779,7 +780,8 @@ QString ApiWrap::exportDirectMessageLink(
 		channel->inputChannel(),
 		MTP_int(item->id)
 	)).done([=](const MTPExportedMessageLink &result) {
-		const auto link = qs(result.data().vlink());
+		const auto link = Core::VoxgramLinkFromServer(
+			qs(result.data().vlink()));
 		if (current != link) {
 			_unlikelyMessageLinks.emplace_or_assign(itemId, link);
 		}
@@ -813,7 +815,8 @@ QString ApiWrap::exportDirectStoryLink(not_null<Data::Story*> story) {
 		peer->input(),
 		MTP_int(story->id())
 	)).done([=](const MTPExportedStoryLink &result) {
-		const auto link = qs(result.data().vlink());
+		const auto link = Core::VoxgramLinkFromServer(
+			qs(result.data().vlink()));
 		if (current != link) {
 			_unlikelyStoryLinks.emplace_or_assign(storyId, link);
 		}

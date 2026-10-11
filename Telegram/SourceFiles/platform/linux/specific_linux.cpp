@@ -690,7 +690,7 @@ QString psAppDataPath() {
 	// If we find data there, we should still use it.
 	auto home = QDir::homePath();
 	if (!home.isEmpty()) {
-		auto oldPath = home + u"/.TelegramDesktop/"_q;
+		auto oldPath = home + u"/.VoxgramDesktop/"_q;
 		auto oldSettingsBase = oldPath + u"tdata/settings"_q;
 		if (QFile::exists(oldSettingsBase + '0')
 			|| QFile::exists(oldSettingsBase + '1')

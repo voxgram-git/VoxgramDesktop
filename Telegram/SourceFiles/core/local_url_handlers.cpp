@@ -1834,6 +1834,16 @@ const std::vector<LocalUrlHandler> &InternalUrlHandlers() {
 	return Result;
 }
 
+QString VoxgramLinkFromServer(QString link) {
+	const auto match = qthelp::regex_match(
+		u"^(https?://)?(www\\.)?(t\\.me|telegram\\.(me|dog))/"_q,
+		link,
+		qthelp::RegExOption::CaseInsensitive);
+	return match
+		? (u"https://voxgram.fun/"_q + link.mid(match->capturedLength(0)))
+		: link;
+}
+
 QString TryConvertUrlToLocal(QString url) {
 	if (url.size() > 8192) {
 		url = url.mid(0, 8192);
@@ -1848,7 +1858,7 @@ QString TryConvertUrlToLocal(QString url) {
 		const auto protocol = tonsiteMatch->captured(1);
 		return u"tonsite://"_q + url.mid(protocol.size());
 	}
-	auto subdomainMatch = regex_match(u"^(https?://)?([a-zA-Z0-9\\_]+)\\.t\\.me(/\\d+)?/?(\\?.+)?"_q, url, matchOptions);
+	auto subdomainMatch = regex_match(u"^(https?://)?([a-zA-Z0-9\\_]+)\\.(?:t\\.me|voxgram\\.fun)(/\\d+)?/?(\\?.+)?"_q, url, matchOptions);
 	if (subdomainMatch) {
 		const auto name = subdomainMatch->captured(2);
 		if (name.size() > 1 && name != "www") {
@@ -1863,9 +1873,20 @@ QString TryConvertUrlToLocal(QString url) {
 				: url;
 		}
 	}
-	auto telegramMeMatch = regex_match(u"^(https?://)?(www\\.)?(telegram\\.(me|dog)|t\\.me)/(.+)$"_q, url, matchOptions);
+	auto telegramMeMatch = regex_match(u"^(https?://)?(www\\.)?(telegram\\.(me|dog)|t\\.me|voxgram\\.fun)/(.+)$"_q, url, matchOptions);
 	if (telegramMeMatch) {
 		const auto query = telegramMeMatch->capturedView(5);
+		// voxgram.fun is both the site and the link domain: keep the site
+		// pages (legal, FAQ, ...) in the browser.
+		if (telegramMeMatch->capturedView(3).compare(
+				u"voxgram.fun"_q,
+				Qt::CaseInsensitive) == 0
+			&& regex_match(
+				u"^(#|(legal|faq|donate|privacy|tos|changelog)(/|\\?|#|$))"_q,
+				query,
+				matchOptions)) {
+			return url;
+		}
 		if (const auto phoneMatch = regex_match(u"^\\+([0-9]+)(\\?|$)"_q, query, matchOptions)) {
 			const auto params = query.mid(phoneMatch->captured(0).size()).toString();
 			return u"tg://resolve?phone="_q + phoneMatch->captured(1) + (params.isEmpty() ? QString() : '&' + params);

@@ -41,6 +41,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/toast/toast.h"
 #include "data/data_changes.h"
 #include "core/application.h"
+#include "core/local_url_handlers.h"
 #include "core/core_settings.h"
 #include "webrtc/webrtc_audio_input_tester.h"
 #include "webrtc/webrtc_device_resolver.h"
@@ -928,7 +929,8 @@ std::pair<Fn<void()>, rpl::lifetime> ShareInviteLinkAction(
 			state->linkListenerRequestId = 0;
 			result.match([&](
 				const MTPDphone_exportedGroupCallInvite &data) {
-				state->linkListener = qs(data.vlink());
+				state->linkListener = Core::VoxgramLinkFromServer(
+					qs(data.vlink()));
 				shareReady();
 			});
 		}).send();
@@ -947,7 +949,8 @@ std::pair<Fn<void()>, rpl::lifetime> ShareInviteLinkAction(
 				state->linkSpeakerRequestId = 0;
 				result.match([&](
 						const MTPDphone_exportedGroupCallInvite &data) {
-					state->linkSpeaker = qs(data.vlink());
+					state->linkSpeaker = Core::VoxgramLinkFromServer(
+						qs(data.vlink()));
 					shareReady();
 				});
 			}).fail([=] {

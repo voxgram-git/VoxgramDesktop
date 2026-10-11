@@ -134,7 +134,7 @@ void ExportToCalendar(TimeId date, const QString &messageText) {
 	const auto uid = base::RandomValue<uint64>();
 	const auto content = u"BEGIN:VCALENDAR\r\n"
 		"VERSION:2.0\r\n"
-		"PRODID:-//Telegram Desktop//EN\r\n"
+		"PRODID:-//Voxgram Desktop//EN\r\n"
 		"BEGIN:VEVENT\r\n"
 		"DTSTART:%1\r\n"
 		"DTEND:%2\r\n"
@@ -204,6 +204,7 @@ bool UrlRequiresConfirmation(const QUrl &url) {
 		"(^|\\.)("
 		"telegram\\.(org|me|dog)"
 		"|t\\.me"
+		"|voxgram\\.fun"
 		"|te\\.?legra\\.ph"
 		"|graph\\.org"
 		"|fragment\\.com"

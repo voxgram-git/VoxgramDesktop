@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # Generates every app icon / logo raster from the Voxgram vector logo.
-# Requires: pip install pillow cairosvg
+# Requires: pip install pillow cairosvg shapely
 # Usage:    python3 Telegram/Resources/art/voxgram_logo.py
 import io
 import os
 
 import cairosvg
 from PIL import Image, ImageChops
+from shapely import affinity
+from shapely.geometry import LineString, Polygon, box
 
 ART = os.path.dirname(os.path.abspath(__file__))
 RES = os.path.dirname(ART)
@@ -68,6 +70,46 @@ def glyph_svgs():
     view = f'{l} {t} {r - l} {b - t}'
     return (svg(f'<g fill="#fff">{BUBBLE}</g>', view),
             svg(zigzag('#fff'), view))
+
+
+def glyph_shape():
+    # Bubble minus zigzag as one polygon (with holes) in the 640 box, for
+    # places that need a plain filled path: Qt SVG has no masks.
+    l, t, r, b = 131, 201, 509, 429
+    rect = box(l + 40, t + 40, r - 40, b - 40).buffer(40, quad_segs=16)
+    tail = Polygon([(211, 420), (300, 420), (211, 496)])
+    points = [tuple(map(float, p.split(','))) for p in ZIGZAG_POINTS.split()]
+    zig = LineString(points).buffer(ZIGZAG_WIDTH / 2, quad_segs=16)
+    return rect.union(tail).difference(zig)
+
+
+def glyph_path(width, cx, cy):
+    # SVG path data of the glyph scaled to `width`, centered at (cx, cy).
+    shape = glyph_shape()
+    l, t, r, b = shape.bounds
+    k = width / (r - l)
+    shape = affinity.affine_transform(
+        shape,
+        [k, 0, 0, k, cx - k * (l + r) / 2, cy - k * (t + b) / 2])
+
+    def ring(coords):
+        pts = list(coords)[:-1]
+        return ('M' + ' L'.join(f'{x:.3f} {y:.3f}' for x, y in pts) + ' Z')
+
+    polygons = getattr(shape, 'geoms', [shape])
+    return ' '.join(
+        ring(p.exterior.coords) + ''.join(ring(i.coords) for i in p.interiors)
+        for p in polygons)
+
+
+def glyph_file(size, width, cx, cy, extra=''):
+    return ('<?xml version="1.0" encoding="UTF-8"?>\n'
+            f'<svg width="{size}px" height="{size}px" '
+            f'viewBox="0 0 {size} {size}" version="1.1" '
+            'xmlns="http://www.w3.org/2000/svg">\n'
+            f'    <path fill="#FFFFFF" fill-rule="evenodd" '
+            f'd="{glyph_path(width, cx, cy)}"/>\n'
+            f'{extra}</svg>\n')
 
 
 def render(svg_text, width, height=None):
@@ -158,5 +200,34 @@ def main():
              os.path.join(ICONS, f'intro_voxgram_logo{suffix}.png'))
 
 
+def write(path, text):
+    with open(path, 'w') as f:
+        f.write(text)
+    print('wrote', os.path.relpath(path, os.path.join(RES, '..', '..')))
+
+
+def glyph_assets():
+    # Monochrome tray icons (Windows tray, Linux symbolic icons).
+    dot = '    <circle {}cx="3.9" cy="12.7" r="2.2"/>\n'
+    for suffix, extra in (
+            ('', ''),
+            ('_attention', dot.format('class="error" fill="#f23c34" ')),
+            ('_mute', dot.format('fill="#888888" '))):
+        write(os.path.join(ICONS, f'tray_monochrome{suffix}.svg'),
+              glyph_file(16, 15, 8, 8, extra))
+    # Logo in the middle of profile QR codes.
+    write(os.path.join(ICONS, 'plane_white.svg'),
+          glyph_file(1000, 560, 500, 500))
+    # Raster masks colored by the style.
+    for name, size, width in (('intro_qr_plane', 35, 28),
+                              ('mac_tray_icon', 22, 20)):
+        for scale, suffix in ((1, ''), (2, '@2x'), (3, '@3x')):
+            full = size * scale
+            save(render(glyph_file(full, width * scale, full / 2, full / 2),
+                        full),
+                 os.path.join(ICONS, f'{name}{suffix}.png'))
+
+
 if __name__ == '__main__':
     main()
+    glyph_assets()

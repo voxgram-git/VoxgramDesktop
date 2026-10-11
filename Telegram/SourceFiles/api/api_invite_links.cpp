@@ -17,6 +17,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_session.h"
 #include "base/unixtime.h"
 #include "apiwrap.h"
+#include "core/local_url_handlers.h"
 
 namespace Api {
 namespace {
@@ -745,7 +746,7 @@ auto InviteLinks::parse(
 		const MTPExportedChatInvite &invite) const -> std::optional<Link> {
 	return invite.match([&](const MTPDchatInviteExported &data) {
 		return std::optional<Link>(Link{
-			.link = qs(data.vlink()),
+			.link = Core::VoxgramLinkFromServer(qs(data.vlink())),
 			.label = qs(data.vtitle().value_or_empty()),
 			.subscription = data.vsubscription_pricing()
 				? Data::PeerSubscription{
