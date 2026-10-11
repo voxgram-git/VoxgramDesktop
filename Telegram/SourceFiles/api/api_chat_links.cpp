@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "api/api_text_entities.h"
 #include "apiwrap.h"
+#include "core/local_url_handlers.h"
 #include "data/data_session.h"
 #include "main/main_session.h"
 
@@ -20,7 +21,7 @@ namespace {
 		const MTPBusinessChatLink &link) {
 	const auto &data = link.data();
 	return {
-		.link = qs(data.vlink()),
+		.link = Core::VoxgramLinkFromServer(qs(data.vlink())),
 		.title = qs(data.vtitle().value_or_empty()),
 		.message = {
 			qs(data.vmessage()),

@@ -25,6 +25,43 @@ constexpr auto kCloudLangPackName = "tdesktop"_cs;
 constexpr auto kCustomLanguage = "#custom"_cs;
 constexpr auto kLangValuesLimit = 20000;
 
+// Voxgram: language packs come from the server and may still mention
+// Telegram, rebrand them on the fly.
+[[nodiscard]] QString RebrandValue(QString value) {
+	// "Телеграм" in Cyrillic.
+	const auto ru = u"\u0422\u0435\u043b\u0435\u0433\u0440\u0430\u043c"_q;
+	if (!value.contains(u"elegram"_q, Qt::CaseInsensitive)
+		&& !value.contains(u"t.me/"_q, Qt::CaseInsensitive)
+		&& !value.contains(ru, Qt::CaseInsensitive)) {
+		return value;
+	}
+	static const auto site = QRegularExpression(
+		u"(?<![\\w.])(https?://)?(www\\.)?(telegram\\.org|t\\.me)\\b"_q,
+		QRegularExpression::CaseInsensitiveOption);
+	static const auto name = QRegularExpression(
+		u"\\bTelegram\\b|\\bTELEGRAM\\b"_q);
+	static const auto cyrillic = QRegularExpression(
+		ru + u"\u043c?[\u0430-\u044f\u0451]*"_q,
+		QRegularExpression::CaseInsensitiveOption);
+	value.replace(site, u"https://voxgram.fun"_q);
+	value.replace(name, u"Voxgram"_q);
+	value.replace(cyrillic, u"Voxgram"_q);
+	return value;
+}
+
+// Voxgram: links that must point to our site whatever the server
+// language pack says.
+[[nodiscard]] std::optional<QString> FixedValue(ushort key) {
+	if (key == tr::lng_settings_faq_link.base) {
+		return u"https://voxgram.fun/#faq"_q;
+	} else if (key == tr::lng_mini_apps_tos_url.base
+		|| key == tr::lng_star_ref_tos_url.base
+		|| key == tr::lng_profile_bot_privacy_url.base) {
+		return u"https://voxgram.fun/legal/bots"_q;
+	}
+	return std::nullopt;
+}
+
 std::vector<QString> PrepareDefaultValues() {
 	auto result = std::vector<QString>();
 	result.reserve(kKeysCount);
@@ -729,6 +766,7 @@ QString Instance::getNonDefaultValue(const QByteArray &key) const {
 void Instance::applyValue(const QByteArray &key, const QByteArray &value) {
 	_nonDefaultValues[key] = value;
 	ParseKeyValue(key, value, [&](ushort key, QString &&value) {
+		value = FixedValue(key).value_or(RebrandValue(std::move(value)));
 		_nonDefaultSet[key] = 1;
 		if (!_derived) {
 			_values[key] = std::move(value);

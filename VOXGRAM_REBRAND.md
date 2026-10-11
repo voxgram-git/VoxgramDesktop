@@ -33,20 +33,33 @@
 ### 4. Лого
 - Исходник: `Telegram/Resources/art/voxgram_logo.svg`.
 - Все растровые иконки генерирует `Telegram/Resources/art/voxgram_logo.py`
-  (`pip install pillow cairosvg`, затем `python3 Telegram/Resources/art/voxgram_logo.py`):
+  (`pip install pillow cairosvg shapely`, затем `python3 Telegram/Resources/art/voxgram_logo.py`):
   `art/icon*.png`, `icon256.ico`, `logo_256*.png`, `icon_round512@2x.png`,
   иконки macOS (`Images.xcassets`), UWP (`uwp/AppX/Assets`) и лого на экране
-  входа (`icons/intro_voxgram_logo*.png`).
+  входа (`icons/intro_voxgram_logo*.png`), монохромные иконки трея
+  (`icons/tray_monochrome*.svg`), иконку трея macOS и лого в QR-кодах.
 
 ### 5. Тема
 Встроенные темы `day-blue` и `night` возвращены к оригинальным синим
 цветам (в Opengram они были перекрашены в зелёный).
 
-### 6. Адреса серверов
-JSON-конфиг Opengram (`opengram_settings.json` и загрузка адресов DC с
-`api.opengra.me/v1/config`) удалён. Адреса DC берутся только из
-`kBuiltInDcs` в `mtproto/mtproto_dc_options.cpp`, URL апдейтера —
-`https://voxgram.fun`.
+### 6. Ссылки voxgram.fun
+- `https://voxgram.fun/...` открываются внутри клиента, как раньше `t.me`
+  (`Core::TryConvertUrlToLocal`). Страницы сайта (`/#...`, `/legal`, `/faq`,
+  `/donate`, `/privacy`, `/tos`, `/changelog`) открываются в браузере.
+- Ссылки, которые строит клиент (юзернеймы, посты), всегда на
+  `https://voxgram.fun/`, `me_url_prefix` из серверного конфига игнорируется.
+- Ссылки от сервера (приглашения, ссылки на сообщения и истории, звонки)
+  с `t.me` переписываются на `voxgram.fun` (`Core::VoxgramLinkFromServer`).
+- Языковые пакеты с сервера: `Telegram`/`Телеграм` → `Voxgram`,
+  `telegram.org`/`t.me` → `voxgram.fun` (`lang_instance.cpp`). FAQ всегда
+  `https://voxgram.fun/#faq`, политика ботов и мини-приложений —
+  `https://voxgram.fun/legal/bots`.
+
+### 7. Адреса серверов
+JSON-конфиг Opengram удалён. Адреса DC берутся только из `kBuiltInDcs`
+в `mtproto/mtproto_dc_options.cpp` (сейчас `31.77.10.99:20443`), URL
+апдейтера — `https://voxgram.fun`.
 
 ## RSA-ключ сервера
 

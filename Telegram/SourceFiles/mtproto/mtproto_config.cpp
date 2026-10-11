@@ -254,7 +254,8 @@ void Config::apply(const MTPDconfig &data) {
 	_fields.revokePrivateTimeLimit = data.vrevoke_pm_time_limit().v;
 	_fields.revokePrivateInbox = data.is_revoke_pm_inbox();
 	_fields.stickersRecentLimit = data.vstickers_recent_limit().v;
-	_fields.internalLinksDomain = qs(data.vme_url_prefix());
+	// Voxgram: keep the built-in links domain (voxgram.fun), the server
+	// me_url_prefix may still point to t.me.
 	_fields.channelsReadMediaPeriod = data.vchannels_read_media_period().v;
 	_fields.webFileDcId = data.vwebfile_dc_id().v;
 	_fields.callReceiveTimeoutMs = data.vcall_receive_timeout_ms().v;

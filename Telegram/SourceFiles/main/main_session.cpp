@@ -70,22 +70,9 @@ constexpr auto kTmpPasswordReserveTime = TimeId(10);
 
 [[nodiscard]] QString ValidatedInternalLinksDomain(
 		not_null<const Session*> session) {
-	// This domain should start with 'http[s]://' and end with '/'.
-	// Like 'https://telegram.me/' or 'https://voxgram.fun/'.
-	const auto &domain = session->serverConfig().internalLinksDomain;
-	const auto prefixes = {
-		u"https://"_q,
-		u"http://"_q,
-	};
-	for (const auto &prefix : prefixes) {
-		if (domain.startsWith(prefix, Qt::CaseInsensitive)) {
-			return domain.endsWith('/')
-				? domain
-				: MTP::ConfigFields(
-					session->mtp().environment()
-				).internalLinksDomain;
-		}
-	}
+	// Voxgram: links are always built on our own domain
+	// ('https://voxgram.fun/'), ignoring the server me_url_prefix,
+	// which may still point to t.me.
 	return MTP::ConfigFields(
 		session->mtp().environment()
 	).internalLinksDomain;
