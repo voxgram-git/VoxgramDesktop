@@ -42,10 +42,19 @@ using namespace TouchBar::Main;
 		init:controller
 		identifier:kPopoverPickerItemIdentifier] autorelease];
 
+	auto *emoji = [[[EmojiPickerPopover alloc]
+		init:controller
+		identifier:kPopoverEmojiItemIdentifier] autorelease];
+
 	auto *format = [[[TextFormatPopover alloc]
 		init:kPopoverInputItemIdentifier] autorelease];
 
-	self.templateItems = [NSSet setWithArray:@[pin, sticker, format]];
+	self.templateItems = [NSSet setWithArray:@[
+		pin,
+		sticker,
+		emoji,
+		format
+	]];
 
 	return self;
 }

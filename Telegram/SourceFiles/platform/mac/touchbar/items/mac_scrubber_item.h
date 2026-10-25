@@ -19,3 +19,9 @@ API_AVAILABLE(macos(10.12.2))
 - (id)init:(not_null<Window::Controller*>)controller
 	identifier:(NSTouchBarItemIdentifier)identifier;
 @end
+
+API_AVAILABLE(macos(10.12.2))
+@interface EmojiPickerPopover : NSPopoverTouchBarItem<NSTouchBarDelegate>
+- (id)init:(not_null<Window::Controller*>)controller
+	identifier:(NSTouchBarItemIdentifier)identifier;
+@end

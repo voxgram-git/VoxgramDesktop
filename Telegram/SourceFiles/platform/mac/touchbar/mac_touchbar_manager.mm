@@ -151,13 +151,16 @@ const auto kAudioItemIdentifier = @"touchbarAudio";
 		) | rpl::on_next([=](
 				Ui::MarkdownEnabledState state,
 				bool hasActiveChat) {
-			item.groupTouchBar.defaultItemIdentifiers = @[
-				kPinnedPanelItemIdentifier,
-				(!state.disabled()
-					? kPopoverInputItemIdentifier
-					: hasActiveChat
-					? kPopoverPickerItemIdentifier
-					: @"")];
+			item.groupTouchBar.defaultItemIdentifiers = !state.disabled()
+				? @[
+					kPinnedPanelItemIdentifier,
+					kPopoverEmojiItemIdentifier,
+					kPopoverInputItemIdentifier
+				]
+				: @[
+					kPinnedPanelItemIdentifier,
+					(hasActiveChat ? kPopoverPickerItemIdentifier : @"")
+				];
 		}, [item lifetime]);
 
 		return [item autorelease];

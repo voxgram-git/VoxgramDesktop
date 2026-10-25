@@ -22,7 +22,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_document_media.h"
 #include "data/data_file_origin.h"
 #include "data/data_forum_topic.h"
+#include "data/data_peer_values.h"
 #include "data/data_session.h"
+#include "data/stickers/data_custom_emoji.h"
 #include "data/stickers/data_stickers.h"
 #include "history/history.h"
 #include "lang/lang_keys.h"
@@ -30,11 +32,13 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "platform/mac/touchbar/mac_touchbar_common.h"
 #include "styles/style_basic.h"
 #include "styles/style_settings.h"
+#include "ui/text/text_custom_emoji.h"
 #include "ui/widgets/fields/input_field.h"
 #include "window/section_widget.h"
 #include "window/window_controller.h"
 #include "window/window_session_controller.h"
 
+#import <AppKit/NSButton.h>
 #import <AppKit/NSCustomTouchBarItem.h>
 #import <AppKit/NSGestureRecognizer.h>
 #import <AppKit/NSImage.h>
@@ -89,6 +93,39 @@ inline bool IsSticker(ScrubberItemType type) {
 	return type == ScrubberItemType::Sticker;
 }
 
+struct CustomEmojiThumbnail {
+	Fn<std::unique_ptr<Ui::Text::CustomEmoji>()> create;
+	std::unique_ptr<Ui::Text::CustomEmoji> emoji;
+	QImage image;
+
+	[[nodiscard]] QImage validate() {
+		if (!image.isNull()) {
+			return image;
+		} else if (!emoji) {
+			emoji = base::take(create)();
+		}
+		auto result = QImage(
+			QSize(kIdealIconSize, kIdealIconSize) * style::DevicePixelRatio(),
+			QImage::Format_ARGB32_Premultiplied);
+		result.setDevicePixelRatio(style::DevicePixelRatio());
+		result.fill(Qt::black);
+		const auto ready = emoji->ready();
+		{
+			auto p = QPainter(&result);
+			PainterHighQualityEnabler hq(p);
+			emoji->paint(p, {
+				.textColor = QColor(255, 255, 255),
+				.now = crl::now(),
+				.paused = true,
+			});
+		}
+		if (ready) {
+			image = result;
+		}
+		return result;
+	}
+};
+
 struct PickerScrubberItem {
 	PickerScrubberItem(QString title) : title(title) {
 	}
@@ -98,6 +135,12 @@ struct PickerScrubberItem {
 		updateThumbnail();
 	}
 	PickerScrubberItem(EmojiPtr emoji) : emoji(emoji) {
+	}
+	PickerScrubberItem(
+		DocumentId customEmojiId,
+		std::shared_ptr<CustomEmojiThumbnail> customEmoji)
+	: customEmojiId(customEmojiId)
+	, customEmoji(std::move(customEmoji)) {
 	}
 
 	void updateThumbnail() {
@@ -126,11 +169,15 @@ struct PickerScrubberItem {
 	QImage image;
 
 	EmojiPtr emoji = nullptr;
+
+	DocumentId customEmojiId = 0;
+	std::shared_ptr<CustomEmojiThumbnail> customEmoji;
 };
 
 struct PickerScrubberItemsHolder {
 	std::vector<PickerScrubberItem> stickers;
 	std::vector<PickerScrubberItem> emoji;
+	rpl::event_stream<int> customEmojiRepaints;
 
 	int size(ScrubberItemType type) {
 		return IsSticker(type) ? stickers.size() : emoji.size();
@@ -276,9 +323,13 @@ void AppendFavedStickers(
 
 void AppendEmojiPacks(
 		const Data::StickersSets &sets,
-		std::vector<PickerScrubberItem> &to) {
+		std::vector<PickerScrubberItem> &to,
+		bool skipRecent = false) {
 	for (auto i = 0; i != ChatHelpers::kEmojiSectionCount; ++i) {
 		const auto section = static_cast<Ui::Emoji::Section>(i);
+		if (skipRecent && section == Ui::Emoji::Section::Recent) {
+			continue;
+		}
 		const auto list = (section == Ui::Emoji::Section::Recent)
 			? RecentEmojiSection()
 			: Ui::Emoji::GetSection(section);
@@ -290,6 +341,111 @@ void AppendEmojiPacks(
 			to.emplace_back(PickerScrubberItem(emoji));
 		}
 	}
+}
+
+void AppendCustomEmoji(
+		not_null<Main::Session*> session,
+		std::weak_ptr<PickerScrubberItemsHolder> holder,
+		std::vector<PickerScrubberItem> &to,
+		std::variant<DocumentId, not_null<DocumentData*>> source) {
+	const auto index = int(to.size());
+	const auto manager = &session->data().customEmojiManager();
+	const auto repaint = [=] {
+		crl::on_main([=] {
+			if (const auto strong = holder.lock()) {
+				strong->customEmojiRepaints.fire_copy(index);
+			}
+		});
+	};
+	auto thumbnail = std::make_shared<CustomEmojiThumbnail>();
+	thumbnail->create = [=] {
+		auto emoji = v::match(source, [&](const auto &value) {
+			return manager->create(
+				value,
+				repaint,
+				Data::CustomEmojiSizeTag::Large,
+				kIdealIconSize);
+		});
+		return std::make_unique<Ui::Text::FirstFrameEmoji>(
+			std::move(emoji));
+	};
+	const auto id = v::match(source, [](DocumentId id) {
+		return id;
+	}, [](not_null<DocumentData*> document) {
+		return document->id;
+	});
+	to.emplace_back(PickerScrubberItem(id, std::move(thumbnail)));
+}
+
+void AppendRecentEmojiWithCustom(
+		not_null<Main::Session*> session,
+		std::weak_ptr<PickerScrubberItemsHolder> holder,
+		std::vector<PickerScrubberItem> &to) {
+	const auto test = session->isTestMode();
+	const auto premium = session->premium();
+	auto &owner = session->data();
+	to.emplace_back(TitleRecentlyUsed(owner.stickers().sets()));
+	for (const auto &recent : Core::App().settings().recentEmoji()) {
+		if (const auto emoji = std::get_if<EmojiPtr>(&recent.id.data)) {
+			to.emplace_back(PickerScrubberItem(*emoji));
+			continue;
+		}
+		const auto custom = std::get_if<Core::RecentEmojiDocument>(
+			&recent.id.data);
+		if (!custom || custom->test != test) {
+			continue;
+		}
+		const auto document = owner.document(custom->id);
+		if (!premium && document->sticker() && document->isPremiumEmoji()) {
+			continue;
+		}
+		AppendCustomEmoji(session, holder, to, custom->id);
+	}
+}
+
+void AppendCustomEmojiSets(
+		not_null<Main::Session*> session,
+		std::weak_ptr<PickerScrubberItemsHolder> holder,
+		std::vector<PickerScrubberItem> &to) {
+	const auto premium = session->premium();
+	const auto &stickers = session->data().stickers();
+	const auto &sets = stickers.sets();
+	for (const auto setId : stickers.emojiSetsOrder()) {
+		const auto it = sets.find(setId);
+		if (it == sets.cend() || it->second->stickers.isEmpty()) {
+			continue;
+		}
+		const auto set = it->second.get();
+		if ((set->flags & Data::StickersSetFlag::Archived)
+			|| !(set->flags & Data::StickersSetFlag::Installed)) {
+			continue;
+		}
+		auto titleAdded = false;
+		for (const auto document : set->stickers) {
+			if (!document->sticker()
+				|| (!premium && document->isPremiumEmoji())) {
+				continue;
+			}
+			if (!titleAdded) {
+				to.emplace_back(PickerScrubberItem(set->title.isEmpty()
+					? set->shortName
+					: set->title));
+				titleAdded = true;
+			}
+			AppendCustomEmoji(
+				session,
+				holder,
+				to,
+				not_null<DocumentData*>(document));
+		}
+	}
+}
+
+Ui::InputField *FocusedInputField() {
+	const auto focused = QApplication::focusWidget();
+	return focused
+		? dynamic_cast<Ui::InputField*>(focused->parentWidget())
+		: nullptr;
 }
 
 } // namespace
@@ -378,6 +534,14 @@ void AppendEmojiPacks(
 	}
 	_lastPreviewedSticker = 0;
 
+	_itemsDataSource->customEmojiRepaints.events(
+	) | rpl::on_next([=](int index) {
+		if (index < scrubber.numberOfItems) {
+			[scrubber reloadItemsAtIndexes:[NSIndexSet
+				indexSetWithIndex:index]];
+		}
+	}, _lifetime);
+
 	self.view = scrubber;
 	return self;
 }
@@ -449,6 +613,12 @@ void AppendEmojiPacks(
 		itemView.imageView.image = Q2NSImage(item.image);
 		itemView->documentId = document->id;
 		return itemView;
+	} else if (const auto &customEmoji = item.customEmoji) {
+		NSScrubberImageItemView *itemView = [scrubber
+			makeItemWithIdentifier:kEmojiItemIdentifier
+			owner:self];
+		itemView.imageView.image = Q2NSImage(customEmoji->validate());
+		return itemView;
 	} else if (const auto emoji = item.emoji) {
 		NSScrubberImageItemView *itemView = [scrubber
 			makeItemWithIdentifier:kEmojiItemIdentifier
@@ -478,6 +648,7 @@ void AppendEmojiPacks(
 	const auto sticker = _itemsDataSource->at(index, _type);
 	const auto document = sticker.document;
 	const auto emoji = sticker.emoji;
+	const auto customEmojiId = sticker.customEmojiId;
 	const auto kRight = document
 		? ChatRestriction::SendStickers
 		: ChatRestriction::SendOther;
@@ -507,6 +678,36 @@ void AppendEmojiPacks(
 				Core::App().settings().incrementRecentEmoji({ emoji });
 				return true;
 			}
+		} else if (customEmojiId) {
+			if (const auto error = RestrictionToSend(_controller, kRight)) {
+				_controller->show(Ui::MakeInformBox(*error));
+				return true;
+			}
+			const auto field = FocusedInputField();
+			const auto controller = _controller->sessionController();
+			if (!field || !controller) {
+				return false;
+			}
+			const auto session = &controller->session();
+			const auto custom = session->data().document(customEmojiId);
+			const auto peer = ActiveChat(_controller).peer();
+			if (!custom->sticker()) {
+				return false;
+			} else if (custom->isPremiumEmoji()
+				&& !session->premium()
+				&& (!peer || !Data::AllowEmojiWithoutPremium(peer, custom))) {
+				controller->showToast(
+					tr::lng_animated_emoji_text(tr::now, tr::rich));
+				return true;
+			}
+			Data::InsertCustomEmoji(field, custom);
+			Core::App().settings().incrementRecentEmoji({
+				Core::RecentEmojiDocument{
+					custom->id,
+					session->isTestMode(),
+				},
+			});
+			return true;
 		}
 		return false;
 	};
@@ -714,3 +915,89 @@ void AppendEmojiPacks(
 }
 
 @end // @implementation StickerEmojiPopover
+
+#pragma mark - EmojiPickerPopover
+
+@implementation EmojiPickerPopover {
+	Window::Controller *_controller;
+	Main::Session *_session;
+	std::shared_ptr<PickerScrubberItemsHolder> _itemsDataSource;
+	bool _waitingForUpdate;
+
+	rpl::lifetime _lifetime;
+}
+
+- (id)init:(not_null<Window::Controller*>)controller
+		identifier:(NSTouchBarItemIdentifier)identifier {
+	self = [super initWithIdentifier:identifier];
+	if (!self) {
+		return nil;
+	}
+	_controller = controller;
+	_session = &controller->sessionController()->session();
+	_itemsDataSource = std::make_shared<PickerScrubberItemsHolder>();
+	_waitingForUpdate = true;
+
+	auto *button = [NSButton
+		buttonWithImage:CreateNSImageFromStyleIcon(
+			st::settingsIconEmoji,
+			kSegmentIconSize)
+		target:self
+		action:@selector(buttonClicked:)];
+	self.visibilityPriority = NSTouchBarItemPriorityHigh;
+	self.collapsedRepresentation = button;
+
+	self.popoverTouchBar = [[[NSTouchBar alloc] init] autorelease];
+	self.popoverTouchBar.delegate = self;
+
+	controller->sessionController()->activeChatValue(
+	) | rpl::on_next([=](Dialogs::Key) {
+		[self dismissPopover:nil];
+	}, _lifetime);
+
+	rpl::merge(
+		Core::App().settings().recentEmojiUpdated(),
+		Ui::Emoji::Updated(),
+		_session->data().stickers().updated(Data::StickersType::Emoji),
+		Data::AmPremiumValue(_session) | rpl::to_empty
+	) | rpl::on_next([=] {
+		_waitingForUpdate = true;
+	}, _lifetime);
+
+	return self;
+}
+
+- (NSTouchBarItem*)touchBar:(NSTouchBar*)touchBar
+		makeItemForIdentifier:(NSTouchBarItemIdentifier)identifier {
+	if (!touchBar || ![identifier isEqualToString:kEmojiScrubber]) {
+		return nil;
+	}
+	return [[[PickerCustomTouchBarItem alloc]
+		init:(ScrubberItemType::Emoji)
+		controller:_controller
+		items:_itemsDataSource] autorelease];
+}
+
+- (void)buttonClicked:(NSButton*)sender {
+	if (!_controller->sessionController()) {
+		return;
+	}
+	if (_waitingForUpdate) {
+		[self updateEmoji];
+	}
+	self.popoverTouchBar.defaultItemIdentifiers = @[];
+	self.popoverTouchBar.defaultItemIdentifiers = @[kEmojiScrubber];
+	[self showPopover:nil];
+}
+
+- (void)updateEmoji {
+	const auto holder = std::weak_ptr(_itemsDataSource);
+	auto temp = std::vector<PickerScrubberItem>();
+	AppendRecentEmojiWithCustom(_session, holder, temp);
+	AppendCustomEmojiSets(_session, holder, temp);
+	AppendEmojiPacks(_session->data().stickers().sets(), temp, true);
+	_itemsDataSource->emoji = std::move(temp);
+	_waitingForUpdate = false;
+}
+
+@end // @implementation EmojiPickerPopover

@@ -18,6 +18,7 @@ namespace TouchBar::Main {
 const auto kPinnedPanelItemIdentifier = @"pinnedPanel";
 const auto kPopoverInputItemIdentifier = @"popoverInput";
 const auto kPopoverPickerItemIdentifier = @"pickerButtons";
+const auto kPopoverEmojiItemIdentifier = @"popoverEmoji";
 
 } // namespace TouchBar::Main
 
