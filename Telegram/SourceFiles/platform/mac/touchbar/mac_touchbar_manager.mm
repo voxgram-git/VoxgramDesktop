@@ -20,6 +20,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "platform/mac/touchbar/mac_touchbar_audio.h"
 #include "platform/mac/touchbar/mac_touchbar_common.h"
 #include "platform/mac/touchbar/mac_touchbar_main.h"
+#include "platform/mac/touchbar/mac_touchbar_settings.h"
 #include "ui/widgets/fields/input_field.h"
 #include "window/window_controller.h"
 #include "window/window_session_controller.h"
@@ -147,20 +148,34 @@ const auto kAudioItemIdentifier = @"touchbarAudio";
 				return topic
 					? Data::CanSendAnyOf(topic, rights)
 					: (peer && Data::CanSendAnyOf(peer, rights));
-			}) | rpl::distinct_until_changed()
+			}) | rpl::distinct_until_changed(),
+			rpl::single(rpl::empty) | rpl::then(TouchBar::OptionsChanges())
 		) | rpl::on_next([=](
 				Ui::MarkdownEnabledState state,
-				bool hasActiveChat) {
-			item.groupTouchBar.defaultItemIdentifiers = !state.disabled()
-				? @[
-					kPinnedPanelItemIdentifier,
-					kPopoverEmojiItemIdentifier,
-					kPopoverInputItemIdentifier
-				]
-				: @[
-					kPinnedPanelItemIdentifier,
-					(hasActiveChat ? kPopoverPickerItemIdentifier : @"")
-				];
+				bool hasActiveChat,
+				rpl::empty_value) {
+			using TouchBar::Option;
+			const auto enabled = [](Option option) {
+				return TouchBar::OptionEnabled(option);
+			};
+			auto *identifiers = [NSMutableArray array];
+			if (enabled(Option::PinnedChats)) {
+				[identifiers addObject:kPinnedPanelItemIdentifier];
+			}
+			if (!state.disabled()) {
+				if (enabled(Option::RecentEmoji)) {
+					[identifiers addObject:kRecentEmojiItemIdentifier];
+				}
+				if (enabled(Option::EmojiButton)) {
+					[identifiers addObject:kPopoverEmojiItemIdentifier];
+				}
+				if (enabled(Option::FormatButton)) {
+					[identifiers addObject:kPopoverInputItemIdentifier];
+				}
+			} else if (hasActiveChat) {
+				[identifiers addObject:kPopoverPickerItemIdentifier];
+			}
+			item.groupTouchBar.defaultItemIdentifiers = identifiers;
 		}, [item lifetime]);
 
 		return [item autorelease];

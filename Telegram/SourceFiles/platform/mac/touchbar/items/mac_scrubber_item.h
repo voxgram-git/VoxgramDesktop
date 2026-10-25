@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#import <AppKit/NSCustomTouchBarItem.h>
 #import <AppKit/NSPopoverTouchBarItem.h>
 #import <AppKit/NSTouchBar.h>
 
@@ -22,6 +23,12 @@ API_AVAILABLE(macos(10.12.2))
 
 API_AVAILABLE(macos(10.12.2))
 @interface EmojiPickerPopover : NSPopoverTouchBarItem<NSTouchBarDelegate>
+- (id)init:(not_null<Window::Controller*>)controller
+	identifier:(NSTouchBarItemIdentifier)identifier;
+@end
+
+API_AVAILABLE(macos(10.12.2))
+@interface RecentEmojiTouchBarItem : NSCustomTouchBarItem
 - (id)init:(not_null<Window::Controller*>)controller
 	identifier:(NSTouchBarItemIdentifier)identifier;
 @end

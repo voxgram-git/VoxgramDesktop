@@ -70,6 +70,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #ifdef Q_OS_MAC
 #include "base/platform/mac/base_confirm_quit.h"
+#include "platform/mac/touchbar/mac_touchbar_settings.h"
 #endif // Q_OS_MAC
 
 #ifndef TDESKTOP_DISABLE_SPELLCHECK
@@ -720,6 +721,71 @@ void BuildSystemIntegrationSection(SectionBuilder &builder) {
 }
 
 #ifdef DESKTOP_APP_USE_ANGLE
+#ifdef Q_OS_MAC
+void BuildTouchBarSection(SectionBuilder &builder) {
+	using TouchBar::Option;
+
+	builder.addDivider();
+	builder.addSkip();
+	builder.addSubsectionTitle({
+		.id = u"advanced/touchbar"_q,
+		.title = tr::lng_settings_touchbar_title(),
+		.keywords = { u"touch bar"_q, u"touchbar"_q, u"emoji"_q },
+	});
+
+	const auto add = [&](
+			const QString &id,
+			rpl::producer<QString> title,
+			Option option,
+			rpl::producer<bool> shown = rpl::producer<bool>()) {
+		const auto checkbox = builder.addCheckbox({
+			.id = u"advanced/touchbar_"_q + id,
+			.title = std::move(title),
+			.checked = TouchBar::OptionEnabled(option),
+			.keywords = { u"touch bar"_q, u"touchbar"_q, u"emoji"_q },
+			.shown = std::move(shown),
+		});
+		if (checkbox) {
+			checkbox->checkedChanges(
+			) | rpl::on_next([=](bool checked) {
+				TouchBar::SetOptionEnabled(option, checked);
+			}, checkbox->lifetime());
+		}
+		return checkbox;
+	};
+
+	add(
+		u"pinned"_q,
+		tr::lng_settings_touchbar_pinned(),
+		Option::PinnedChats);
+	add(
+		u"recent_emoji"_q,
+		tr::lng_settings_touchbar_recent_emoji(),
+		Option::RecentEmoji);
+	add(
+		u"emoji_button"_q,
+		tr::lng_settings_touchbar_emoji_button(),
+		Option::EmojiButton);
+	add(
+		u"format"_q,
+		tr::lng_settings_touchbar_format(),
+		Option::FormatButton);
+	const auto custom = add(
+		u"custom_emoji"_q,
+		tr::lng_settings_touchbar_custom_emoji(),
+		Option::CustomEmoji);
+	add(
+		u"custom_emoji_first"_q,
+		tr::lng_settings_touchbar_custom_first(),
+		Option::CustomEmojiFirst,
+		(custom
+			? custom->checkedValue()
+			: rpl::single(TouchBar::OptionEnabled(Option::CustomEmoji))));
+
+	builder.addSkip();
+}
+#endif // Q_OS_MAC
+
 void BuildANGLEOption(SectionBuilder &builder) {
 	const auto controller = builder.controller();
 	using ANGLE = Ui::GL::ANGLE;
@@ -1251,6 +1317,9 @@ const auto kMeta = BuildHelper({
 	BuildWindowCloseBehaviorSection(builder);
 #endif
 	BuildSystemIntegrationSection(builder);
+#ifdef Q_OS_MAC
+	BuildTouchBarSection(builder);
+#endif // Q_OS_MAC
 	BuildPerformanceSection(builder);
 	BuildSpellcheckerSection(builder);
 	BuildScreenReaderSection(builder);

@@ -1542,6 +1542,8 @@ PRIVATE
     platform/mac/touchbar/mac_touchbar_manager.mm
     platform/mac/touchbar/mac_touchbar_media_view.h
     platform/mac/touchbar/mac_touchbar_media_view.mm
+    platform/mac/touchbar/mac_touchbar_settings.h
+    platform/mac/touchbar/mac_touchbar_settings.mm
     platform/win/file_utilities_win.cpp
     platform/win/file_utilities_win.h
     platform/win/launcher_win.cpp

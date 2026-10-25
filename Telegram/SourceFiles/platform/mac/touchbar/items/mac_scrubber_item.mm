@@ -11,6 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_sending.h"
 #include "base/call_delayed.h"
 #include "base/platform/mac/base_utilities_mac.h"
+#include "base/timer.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/painter.h"
 #include "chat_helpers/emoji_list_widget.h"
@@ -30,6 +31,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
 #include "platform/mac/touchbar/mac_touchbar_common.h"
+#include "platform/mac/touchbar/mac_touchbar_settings.h"
 #include "styles/style_basic.h"
 #include "styles/style_settings.h"
 #include "ui/text/text_custom_emoji.h"
@@ -64,6 +66,11 @@ constexpr auto kSegmentIconSize = 25;
 constexpr auto kSegmentSize = 92;
 
 constexpr auto kMaxStickerSets = 5;
+constexpr auto kCustomEmojiRetryTimeout = crl::time(500);
+constexpr auto kCustomEmojiRetriesLimit = 60;
+constexpr auto kRecentEmojiRowLimit = 6;
+constexpr auto kRecentEmojiRowSpacing = 10;
+constexpr auto kRecentEmojiRebuildDelay = crl::time(1500);
 
 constexpr auto kGestureStateProcessed = {
 	NSGestureRecognizerStateChanged,
@@ -94,30 +101,63 @@ inline bool IsSticker(ScrubberItemType type) {
 }
 
 struct CustomEmojiThumbnail {
+	not_null<Data::Session*> owner;
+	DocumentId id = 0;
 	Fn<std::unique_ptr<Ui::Text::CustomEmoji>()> create;
 	std::unique_ptr<Ui::Text::CustomEmoji> emoji;
 	QImage image;
 
+	[[nodiscard]] bool loaded() const {
+		return !image.isNull();
+	}
+
+	[[nodiscard]] EmojiPtr fallback() const {
+		const auto sticker = owner->document(id)->sticker();
+		return sticker ? Ui::Emoji::Find(sticker->alt) : nullptr;
+	}
+
 	[[nodiscard]] QImage validate() {
-		if (!image.isNull()) {
+		if (loaded()) {
 			return image;
 		} else if (!emoji) {
 			emoji = base::take(create)();
 		}
+		const auto ratio = style::DevicePixelRatio();
 		auto result = QImage(
-			QSize(kIdealIconSize, kIdealIconSize) * style::DevicePixelRatio(),
+			QSize(kIdealIconSize, kIdealIconSize) * ratio,
 			QImage::Format_ARGB32_Premultiplied);
-		result.setDevicePixelRatio(style::DevicePixelRatio());
+		result.setDevicePixelRatio(ratio);
 		result.fill(Qt::black);
 		const auto ready = emoji->ready();
 		{
 			auto p = QPainter(&result);
 			PainterHighQualityEnabler hq(p);
-			emoji->paint(p, {
-				.textColor = QColor(255, 255, 255),
-				.now = crl::now(),
-				.paused = true,
-			});
+			if (ready) {
+				const auto size = Data::FrameSizeFromTag(
+					Data::CustomEmojiSizeTag::Large) / float64(ratio);
+				const auto scale = kIdealIconSize / size;
+				p.scale(scale, scale);
+				emoji->paint(p, {
+					.textColor = QColor(255, 255, 255),
+					.now = crl::now(),
+					.paused = true,
+				});
+			} else {
+				emoji->paint(p, {
+					.textColor = QColor(255, 255, 255),
+					.now = crl::now(),
+					.position = QPoint(-kIdealIconSize, -kIdealIconSize),
+					.paused = true,
+				});
+				if (const auto alt = fallback()) {
+					Ui::Emoji::Draw(
+						p,
+						alt,
+						Ui::Emoji::GetSizeTouchbar(),
+						0,
+						0);
+				}
+			}
 		}
 		if (ready) {
 			image = result;
@@ -347,9 +387,9 @@ void AppendCustomEmoji(
 		not_null<Main::Session*> session,
 		std::weak_ptr<PickerScrubberItemsHolder> holder,
 		std::vector<PickerScrubberItem> &to,
-		std::variant<DocumentId, not_null<DocumentData*>> source) {
+		DocumentId id) {
 	const auto index = int(to.size());
-	const auto manager = &session->data().customEmojiManager();
+	const auto owner = &session->data();
 	const auto repaint = [=] {
 		crl::on_main([=] {
 			if (const auto strong = holder.lock()) {
@@ -357,42 +397,51 @@ void AppendCustomEmoji(
 			}
 		});
 	};
-	auto thumbnail = std::make_shared<CustomEmojiThumbnail>();
-	thumbnail->create = [=] {
-		auto emoji = v::match(source, [&](const auto &value) {
-			return manager->create(
-				value,
-				repaint,
-				Data::CustomEmojiSizeTag::Large,
-				kIdealIconSize);
+	auto thumbnail = std::make_shared<CustomEmojiThumbnail>(
+		CustomEmojiThumbnail{
+			.owner = owner,
+			.id = id,
+			.create = [=] {
+				return std::make_unique<Ui::Text::FirstFrameEmoji>(
+					owner->customEmojiManager().create(
+						id,
+						repaint,
+						Data::CustomEmojiSizeTag::Large));
+			},
 		});
-		return std::make_unique<Ui::Text::FirstFrameEmoji>(
-			std::move(emoji));
-	};
-	const auto id = v::match(source, [](DocumentId id) {
-		return id;
-	}, [](not_null<DocumentData*> document) {
-		return document->id;
-	});
 	to.emplace_back(PickerScrubberItem(id, std::move(thumbnail)));
 }
+
+struct RecentEmojiDescriptor {
+	int limit = 0;
+	bool title = false;
+	bool custom = false;
+};
 
 void AppendRecentEmojiWithCustom(
 		not_null<Main::Session*> session,
 		std::weak_ptr<PickerScrubberItemsHolder> holder,
-		std::vector<PickerScrubberItem> &to) {
+		std::vector<PickerScrubberItem> &to,
+		RecentEmojiDescriptor descriptor) {
 	const auto test = session->isTestMode();
 	const auto premium = session->premium();
 	auto &owner = session->data();
-	to.emplace_back(TitleRecentlyUsed(owner.stickers().sets()));
+	if (descriptor.title) {
+		to.emplace_back(TitleRecentlyUsed(owner.stickers().sets()));
+	}
+	auto added = 0;
 	for (const auto &recent : Core::App().settings().recentEmoji()) {
-		if (const auto emoji = std::get_if<EmojiPtr>(&recent.id.data)) {
+		if (descriptor.limit && added >= descriptor.limit) {
+			break;
+		} else if (const auto emoji = std::get_if<EmojiPtr>(
+				&recent.id.data)) {
 			to.emplace_back(PickerScrubberItem(*emoji));
+			++added;
 			continue;
 		}
 		const auto custom = std::get_if<Core::RecentEmojiDocument>(
 			&recent.id.data);
-		if (!custom || custom->test != test) {
+		if (!custom || custom->test != test || !descriptor.custom) {
 			continue;
 		}
 		const auto document = owner.document(custom->id);
@@ -400,6 +449,7 @@ void AppendRecentEmojiWithCustom(
 			continue;
 		}
 		AppendCustomEmoji(session, holder, to, custom->id);
+		++added;
 	}
 }
 
@@ -432,11 +482,7 @@ void AppendCustomEmojiSets(
 					: set->title));
 				titleAdded = true;
 			}
-			AppendCustomEmoji(
-				session,
-				holder,
-				to,
-				not_null<DocumentData*>(document));
+			AppendCustomEmoji(session, holder, to, document->id);
 		}
 	}
 }
@@ -473,6 +519,9 @@ Ui::InputField *FocusedInputField() {
 	DocumentId _lastPreviewedSticker;
 	Window::Controller *_controller;
 	History *_history;
+	base::flat_set<int> _pendingCustomEmoji;
+	std::unique_ptr<base::Timer> _customEmojiRetryTimer;
+	int _customEmojiRetries;
 
 	rpl::event_stream<> _closeRequests;
 	rpl::lifetime _lifetime;
@@ -534,6 +583,11 @@ Ui::InputField *FocusedInputField() {
 	}
 	_lastPreviewedSticker = 0;
 
+	_customEmojiRetries = 0;
+	_customEmojiRetryTimer = std::make_unique<base::Timer>([=] {
+		[self retryPendingCustomEmoji];
+	});
+
 	_itemsDataSource->customEmojiRepaints.events(
 	) | rpl::on_next([=](int index) {
 		if (index < scrubber.numberOfItems) {
@@ -544,6 +598,23 @@ Ui::InputField *FocusedInputField() {
 
 	self.view = scrubber;
 	return self;
+}
+
+- (void)retryPendingCustomEmoji {
+	NSScrubber *scrubber = self.view;
+	auto indexes = [NSMutableIndexSet indexSet];
+	for (const auto index : base::take(_pendingCustomEmoji)) {
+		if (index < scrubber.numberOfItems) {
+			[indexes addIndex:index];
+		}
+	}
+	if (indexes.count) {
+		[scrubber reloadItemsAtIndexes:indexes];
+	}
+	if (_pendingCustomEmoji.empty()
+		|| ++_customEmojiRetries >= kCustomEmojiRetriesLimit) {
+		_customEmojiRetryTimer->cancel();
+	}
 }
 
 - (PickerScrubberItem)itemAt:(int)index {
@@ -617,7 +688,17 @@ Ui::InputField *FocusedInputField() {
 		NSScrubberImageItemView *itemView = [scrubber
 			makeItemWithIdentifier:kEmojiItemIdentifier
 			owner:self];
-		itemView.imageView.image = Q2NSImage(customEmoji->validate());
+		const auto image = Core::Sandbox::Instance().customEnterFromEventLoop(
+			[&] { return customEmoji->validate(); });
+		itemView.imageView.image = Q2NSImage(image);
+		if (customEmoji->loaded()) {
+			_pendingCustomEmoji.remove(int(index));
+		} else {
+			_pendingCustomEmoji.emplace(int(index));
+			if (!_customEmojiRetryTimer->isActive()) {
+				_customEmojiRetryTimer->callEach(kCustomEmojiRetryTimeout);
+			}
+		}
 		return itemView;
 	} else if (const auto emoji = item.emoji) {
 		NSScrubberImageItemView *itemView = [scrubber
@@ -959,7 +1040,8 @@ Ui::InputField *FocusedInputField() {
 		Core::App().settings().recentEmojiUpdated(),
 		Ui::Emoji::Updated(),
 		_session->data().stickers().updated(Data::StickersType::Emoji),
-		Data::AmPremiumValue(_session) | rpl::to_empty
+		Data::AmPremiumValue(_session) | rpl::to_empty,
+		TouchBar::OptionsChanges()
 	) | rpl::on_next([=] {
 		_waitingForUpdate = true;
 	}, _lifetime);
@@ -992,12 +1074,102 @@ Ui::InputField *FocusedInputField() {
 
 - (void)updateEmoji {
 	const auto holder = std::weak_ptr(_itemsDataSource);
+	const auto custom = TouchBar::OptionEnabled(
+		TouchBar::Option::CustomEmoji);
+	const auto customFirst = custom
+		&& TouchBar::OptionEnabled(TouchBar::Option::CustomEmojiFirst);
 	auto temp = std::vector<PickerScrubberItem>();
-	AppendRecentEmojiWithCustom(_session, holder, temp);
-	AppendCustomEmojiSets(_session, holder, temp);
+	AppendRecentEmojiWithCustom(_session, holder, temp, {
+		.title = true,
+		.custom = custom,
+	});
+	if (customFirst) {
+		AppendCustomEmojiSets(_session, holder, temp);
+	}
 	AppendEmojiPacks(_session->data().stickers().sets(), temp, true);
+	if (custom && !customFirst) {
+		AppendCustomEmojiSets(_session, holder, temp);
+	}
 	_itemsDataSource->emoji = std::move(temp);
 	_waitingForUpdate = false;
 }
 
 @end // @implementation EmojiPickerPopover
+
+#pragma mark - RecentEmojiTouchBarItem
+
+@implementation RecentEmojiTouchBarItem {
+	Window::Controller *_controller;
+	Main::Session *_session;
+	std::shared_ptr<PickerScrubberItemsHolder> _itemsDataSource;
+	PickerCustomTouchBarItem *_picker;
+	std::unique_ptr<base::Timer> _rebuildTimer;
+
+	rpl::lifetime _lifetime;
+}
+
+- (id)init:(not_null<Window::Controller*>)controller
+		identifier:(NSTouchBarItemIdentifier)identifier {
+	self = [super initWithIdentifier:identifier];
+	if (!self) {
+		return nil;
+	}
+	_controller = controller;
+	_session = &controller->sessionController()->session();
+	_itemsDataSource = std::make_shared<PickerScrubberItemsHolder>();
+	_picker = nil;
+	_rebuildTimer = std::make_unique<base::Timer>([=] {
+		[self rebuild];
+	});
+
+	Core::App().settings().recentEmojiUpdated(
+	) | rpl::on_next([=] {
+		_rebuildTimer->callOnce(kRecentEmojiRebuildDelay);
+	}, _lifetime);
+
+	rpl::merge(
+		controller->sessionController()->activeChatValue(
+		) | rpl::to_empty,
+		Ui::Emoji::Updated(),
+		Data::AmPremiumValue(_session) | rpl::to_empty,
+		TouchBar::OptionsChanges()
+	) | rpl::on_next([=] {
+		[self rebuild];
+	}, _lifetime);
+
+	return self;
+}
+
+- (void)rebuild {
+	_rebuildTimer->cancel();
+	if (!_controller->sessionController()) {
+		return;
+	}
+	const auto holder = std::weak_ptr(_itemsDataSource);
+	auto temp = std::vector<PickerScrubberItem>();
+	AppendRecentEmojiWithCustom(_session, holder, temp, {
+		.limit = kRecentEmojiRowLimit,
+		.custom = TouchBar::OptionEnabled(TouchBar::Option::CustomEmoji),
+	});
+	const auto count = std::max(int(temp.size()), 1);
+	_itemsDataSource->emoji = std::move(temp);
+
+	auto *picker = [[PickerCustomTouchBarItem alloc]
+		init:(ScrubberItemType::Emoji)
+		controller:_controller
+		items:_itemsDataSource];
+	NSView *view = picker.view;
+	const auto width = count * (kCircleDiameter + kRecentEmojiRowSpacing);
+	[view.widthAnchor constraintEqualToConstant:width].active = YES;
+	self.view = view;
+
+	[_picker release];
+	_picker = picker;
+}
+
+- (void)dealloc {
+	[_picker release];
+	[super dealloc];
+}
+
+@end // @implementation RecentEmojiTouchBarItem

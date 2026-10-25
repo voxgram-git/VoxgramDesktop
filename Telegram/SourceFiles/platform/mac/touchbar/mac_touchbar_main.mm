@@ -46,6 +46,10 @@ using namespace TouchBar::Main;
 		init:controller
 		identifier:kPopoverEmojiItemIdentifier] autorelease];
 
+	auto *recent = [[[RecentEmojiTouchBarItem alloc]
+		init:controller
+		identifier:kRecentEmojiItemIdentifier] autorelease];
+
 	auto *format = [[[TextFormatPopover alloc]
 		init:kPopoverInputItemIdentifier] autorelease];
 
@@ -53,6 +57,7 @@ using namespace TouchBar::Main;
 		pin,
 		sticker,
 		emoji,
+		recent,
 		format
 	]];
 
