@@ -7,22 +7,39 @@ on:
   pull_request:
     branches: [master, main]
   workflow_dispatch:
+    inputs:
+      ccache:
+        description: "Use ccache for the Voxgram build"
+        type: boolean
+        default: true
   release:
     types: [created]
 
+concurrency:
+  # Новый пуш в PR отменяет предыдущую сборку. Кэши при этом всё равно
+  # сохраняются (шаги сохранения идут с if: always()).
+  group: macos-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   macos:
-    name: macOS ${{ matrix.arch }} build
-    runs-on: ${{ matrix.arch == 'arm64' && 'macos-14' || 'macos-13' }}
-    timeout-minutes: 180
-
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [arm64, x64]
+    # Одна universal-сборка (arm64 + x86_64) вместо матрицы arm64/x64:
+    # prepare.py и cmake_helpers на macOS и так собирают всё под обе
+    # архитектуры, так что раньше два джоба делали одну и ту же работу.
+    # Плюс образ macos-13 (Intel) GitHub убрал — x64-джоб висел в очереди
+    # 24 часа и отменялся, так и не получив раннер.
+    name: macOS universal build
+    runs-on: macos-15
+    timeout-minutes: 360
 
     env:
       PREPARE_PATH: "Telegram/build/prepare/prepare.py"
+      USE_CCACHE: ${{ github.event_name != 'workflow_dispatch' || inputs.ccache }}
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_UPGRADE: 1
+      HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
 
     steps:
       - name: Get repository name.
@@ -48,31 +65,146 @@ jobs:
           fi
 
       - name: First set up.
+        # Без brew update / brew upgrade: upgrade обновлял все формулы образа
+        # и висел часами (из-за него и падал arm64-джоб по таймауту).
         run: |
-          sudo chown -R `whoami`:admin /usr/local/share
+          sudo chown -R `whoami`:admin /usr/local/share || true
 
-          brew update
-          brew upgrade || true
-          brew install automake meson nasm ninja pkg-config
+          brew install automake meson nasm ninja pkg-config ccache
 
-          sudo mdutil -a -i off
+          sudo mdutil -a -i off || true
           sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          xcodebuild -version
 
           if [ -f /opt/homebrew/share/cmake/Modules/Compiler/GNU.cmake ]; then
             sudo sed -i '' '/CMAKE_${lang}_FLAGS_DEBUG_INIT/s/ -g//' /opt/homebrew/share/cmake/Modules/Compiler/GNU.cmake
           fi
 
+          echo "CACHE_KEY=$(shasum -a 256 "$REPO_NAME/$PREPARE_PATH" | awk '{ print $1 }')" >> $GITHUB_ENV
+          echo "XCODE_VERSION=$(xcodebuild -version | head -1 | awk '{ print $2 }')" >> $GITHUB_ENV
+
       - name: Libraries cache.
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: |
             Libraries
             ThirdParty
-          key: ${{ runner.OS }}-${{ matrix.arch }}-libs-${{ hashFiles(format('{0}/{1}', env.REPO_NAME, env.PREPARE_PATH)) }}
-          restore-keys: ${{ runner.OS }}-${{ matrix.arch }}-libs-
+          key: ${{ runner.os }}-universal-libs-v2-${{ env.CACHE_KEY }}
+          restore-keys: |
+            ${{ runner.os }}-universal-libs-v2-${{ env.CACHE_KEY }}-
+            ${{ runner.os }}-universal-libs-v2-
+
+      - name: Snapshot prepare cache keys.
+        # prepare.py пишет cache_keys/<stage> только после успешной сборки
+        # стадии. Запоминаю их до prepare, чтобы потом сохранять кэш только
+        # если что-то реально дособралось.
+        run: |
+          keys() {
+            [ -d "$1" ] || return 0
+            for f in $(ls "$1" | sort); do printf '%s=%s;' "$f" "$(cat "$1/$f")"; done
+          }
+          { keys Libraries/cache_keys; keys ThirdParty/cache_keys; } > "$RUNNER_TEMP/cache-keys-before"
 
       - name: Libraries.
         run: ./$REPO_NAME/Telegram/build/prepare/mac.sh silent
+
+      - name: Trim post-prepare artifacts.
+        # Промежуточные объектники библиотек (в первую очередь дерево сборки
+        # Qt) и .git-каталоги не нужны для сборки Voxgram, а кэш раздувают за
+        # лимит GitHub. Libraries/local — установленный префикс (в т.ч. Qt с
+        # его objects-*/*.o), его не трогаю.
+        if: always()
+        run: |
+          for dir in Libraries ThirdParty; do
+            [ -d "$dir" ] || continue
+            find "$dir" -path "$dir/local" -prune -o -type f -name '*.o' -print0 | xargs -0 rm -f
+            find "$dir" -path "$dir/local" -prune -o -name .git -prune -print0 | xargs -0 rm -rf
+          done
+          du -sh Libraries ThirdParty 2>/dev/null || true
+          du -sh Libraries/* 2>/dev/null | sort -h | tail -10 || true
+
+      - name: Detect prepare cache changes.
+        # Кэш сохраняется отдельным шагом с if: always(), а не post-шагом
+        # actions/cache: тот сохраняет только при успехе всего job, и после
+        # таймаута сборки следующий запуск собирал все библиотеки заново.
+        id: cache_changes
+        if: always()
+        run: |
+          if [ ! -f "$RUNNER_TEMP/cache-keys-before" ] || [ ! -d Libraries/cache_keys ]; then
+            echo "prepare did not run, nothing to save"
+            exit 0
+          fi
+          keys() {
+            [ -d "$1" ] || return 0
+            for f in $(ls "$1" | sort); do printf '%s=%s;' "$f" "$(cat "$1/$f")"; done
+          }
+          now="$(keys Libraries/cache_keys; keys ThirdParty/cache_keys)"
+          before="$(cat "$RUNNER_TEMP/cache-keys-before")"
+          if [ -n "$now" ] && [ "$now" != "$before" ]; then
+            echo "libs=true" >> $GITHUB_OUTPUT
+            echo "Libraries changed, cache will be saved."
+          else
+            echo "Libraries unchanged."
+          fi
+
+      - name: Save Libraries cache.
+        if: always() && steps.cache_changes.outputs.libs == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            Libraries
+            ThirdParty
+          key: ${{ runner.os }}-universal-libs-v2-${{ env.CACHE_KEY }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: ccache cache.
+        if: env.USE_CCACHE == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: .ccache
+          key: ${{ runner.os }}-ccache-xcode${{ env.XCODE_VERSION }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-xcode${{ env.XCODE_VERSION }}-
+
+      - name: Set up ccache.
+        # Xcode-генератор не поддерживает CMAKE_<LANG>_COMPILER_LAUNCHER,
+        # поэтому подменяю компилятор через Xcode build settings CC/CXX
+        # обёртками над ccache (так же делает React Native). Линкер остаётся
+        # обычным clang.
+        if: env.USE_CCACHE == 'true'
+        run: |
+          mkdir -p "$CCACHE_DIR"
+          cat > "$CCACHE_DIR/ccache.conf" <<EOF
+          base_dir = $GITHUB_WORKSPACE
+          max_size = 2G
+          compression = true
+          depend_mode = true
+          file_clone = true
+          inode_cache = true
+          sloppiness = clang_index_store,file_stat_matches,include_file_ctime,include_file_mtime,ivfsoverlay,pch_defines,modules,system_headers,time_macros
+          EOF
+
+          CLANG="$(xcrun --find clang)"
+          CLANGXX="$(xcrun --find clang++)"
+          BIN="$RUNNER_TEMP/ccache-bin"
+          mkdir -p "$BIN"
+          # -fno-pch-timestamp делает .pch воспроизводимым, иначе ccache
+          # промахивается на всех файлах с precompiled header.
+          printf '#!/bin/sh\nexec ccache "%s" -Xclang -fno-pch-timestamp "$@"\n' "$CLANG" > "$BIN/ccache-clang"
+          printf '#!/bin/sh\nexec ccache "%s" -Xclang -fno-pch-timestamp "$@"\n' "$CLANGXX" > "$BIN/ccache-clang++"
+          chmod +x "$BIN/ccache-clang" "$BIN/ccache-clang++"
+
+          {
+            echo "CCACHE_FLAGS<<EOF"
+            echo "-D CMAKE_XCODE_ATTRIBUTE_CC=$BIN/ccache-clang"
+            echo "-D CMAKE_XCODE_ATTRIBUTE_CXX=$BIN/ccache-clang++"
+            echo "-D CMAKE_XCODE_ATTRIBUTE_LD=$CLANG"
+            echo "-D CMAKE_XCODE_ATTRIBUTE_LDPLUSPLUS=$CLANGXX"
+            echo "-D CMAKE_XCODE_ATTRIBUTE_COMPILER_INDEX_STORE_ENABLE=NO"
+            echo "EOF"
+          } >> $GITHUB_ENV
+
+          ccache -z
+          ccache -p | grep -v "(default)" || true
 
       - name: Build Voxgram Desktop.
         env:
@@ -89,9 +221,21 @@ jobs:
           -D DESKTOP_APP_DISABLE_CRASH_REPORTS=ON \
           -D DESKTOP_APP_DISABLE_SWIFT6=ON \
           -D TDESKTOP_API_ID=$TDESKTOP_API_ID \
-          -D TDESKTOP_API_HASH=$TDESKTOP_API_HASH
+          -D TDESKTOP_API_HASH=$TDESKTOP_API_HASH \
+          $CCACHE_FLAGS
 
           cmake --build ../out --config Release --parallel
+
+      - name: ccache stats.
+        if: always() && env.USE_CCACHE == 'true'
+        run: ccache -s || true
+
+      - name: Save ccache cache.
+        if: always() && env.USE_CCACHE == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: ${{ runner.os }}-ccache-xcode${{ env.XCODE_VERSION }}-${{ github.run_id }}
 
       - name: Package artifact.
         run: |
@@ -103,19 +247,20 @@ jobs:
             mv Telegram.app artifact/Voxgram.app
           fi
           [ -f Updater ] && mv Updater artifact/
+          lipo -info artifact/Voxgram.app/Contents/MacOS/* || true
 
           cd artifact
-          tar -cJf "voxgram-macos-${{ matrix.arch }}.tar.xz" Voxgram.app Updater 2>/dev/null || tar -cJf "voxgram-macos-${{ matrix.arch }}.tar.xz" Voxgram.app
+          tar -cJf "voxgram-macos-universal.tar.xz" Voxgram.app Updater 2>/dev/null || tar -cJf "voxgram-macos-universal.tar.xz" Voxgram.app
 
       - uses: actions/upload-artifact@v4
         name: Upload artifact.
         with:
-          name: voxgram-macos-${{ matrix.arch }}
-          path: ${{ env.REPO_NAME }}/out/Release/artifact/voxgram-macos-${{ matrix.arch }}.tar.xz
+          name: voxgram-macos-universal
+          path: ${{ env.REPO_NAME }}/out/Release/artifact/voxgram-macos-universal.tar.xz
           retention-days: 30
 
       - name: Attach to release.
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.REPO_NAME }}/out/Release/artifact/voxgram-macos-${{ matrix.arch }}.tar.xz
+          files: ${{ env.REPO_NAME }}/out/Release/artifact/voxgram-macos-universal.tar.xz
