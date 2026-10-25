@@ -23,14 +23,29 @@ concurrency:
 
 jobs:
   macos:
-    # Одна universal-сборка (arm64 + x86_64) вместо матрицы arm64/x64:
-    # prepare.py и cmake_helpers на macOS и так собирают всё под обе
-    # архитектуры, так что раньше два джоба делали одну и ту же работу.
-    # Плюс образ macos-13 (Intel) GitHub убрал — x64-джоб висел в очереди
-    # 24 часа и отменялся, так и не получив раннер.
-    name: macOS universal build
+    # Universal-сборка (arm64 + x86_64) в одном джобе компилирует каждый
+    # файл дважды и на 3-ядерном раннере не укладывается в лимит 6 часов.
+    # Поэтому два параллельных джоба, по одному на архитектуру, оба на
+    # Apple Silicon (образ macos-13 с Intel GitHub убрал). Библиотеки из
+    # prepare.py universal, их кэш у обоих джобов общий.
+    #
+    # DESKTOP_APP_MAC_ARCH ограничивает архитектуру целевых таргетов
+    # (Telegram, td_*), а хостовые утилиты (codegen_*), которые запускаются
+    # во время сборки, остаются universal и работают без Rosetta.
+    name: macOS ${{ matrix.arch }} build
     runs-on: macos-15
     timeout-minutes: 360
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            mac_arch: arm64
+            osx_architectures: arm64
+          - arch: x64
+            mac_arch: x86_64
+            osx_architectures: "x86_64;arm64"
 
     env:
       PREPARE_PATH: "Telegram/build/prepare/prepare.py"
@@ -84,13 +99,18 @@ jobs:
           echo "XCODE_VERSION=$(xcodebuild -version | head -1 | awk '{ print $2 }')" >> $GITHUB_ENV
 
       - name: Libraries cache.
+        # v3 — кэш без дерева сборки Qt. Если найдётся только старый v2,
+        # он восстанавливается и пересохраняется уже урезанным.
+        id: libs_cache
         uses: actions/cache/restore@v4
         with:
           path: |
             Libraries
             ThirdParty
-          key: ${{ runner.os }}-universal-libs-v2-${{ env.CACHE_KEY }}
+          key: ${{ runner.os }}-universal-libs-v3-${{ env.CACHE_KEY }}
           restore-keys: |
+            ${{ runner.os }}-universal-libs-v3-${{ env.CACHE_KEY }}-
+            ${{ runner.os }}-universal-libs-v3-
             ${{ runner.os }}-universal-libs-v2-${{ env.CACHE_KEY }}-
             ${{ runner.os }}-universal-libs-v2-
 
@@ -109,12 +129,18 @@ jobs:
         run: ./$REPO_NAME/Telegram/build/prepare/mac.sh silent
 
       - name: Trim post-prepare artifacts.
-        # Промежуточные объектники библиотек (в первую очередь дерево сборки
-        # Qt) и .git-каталоги не нужны для сборки Voxgram, а кэш раздувают за
-        # лимит GitHub. Libraries/local — установленный префикс (в т.ч. Qt с
-        # его objects-*/*.o), его не трогаю.
+        # Промежуточные объектники библиотек и .git-каталоги не нужны для
+        # сборки Voxgram, а кэш раздувают за лимит GitHub. Libraries/local —
+        # установленный префикс (в т.ч. Qt с его objects-*/*.o), его не трогаю.
+        # Дерево сборки Qt (Libraries/qt_*, ~9 ГБ) после установки в
+        # Libraries/local/Qt-* не нужно совсем: очищаю его, оставляя сам
+        # каталог — prepare.py по нему и cache_keys считает стадию готовой.
         if: always()
         run: |
+          for qt in Libraries/qt_*; do
+            [ -d "$qt" ] && [ -f "Libraries/cache_keys/$(basename "$qt")" ] || continue
+            find "$qt" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+          done
           for dir in Libraries ThirdParty; do
             [ -d "$dir" ] || continue
             find "$dir" -path "$dir/local" -prune -o -type f -name '*.o' -print0 | xargs -0 rm -f
@@ -143,27 +169,34 @@ jobs:
           if [ -n "$now" ] && [ "$now" != "$before" ]; then
             echo "libs=true" >> $GITHUB_OUTPUT
             echo "Libraries changed, cache will be saved."
+          elif [ -n "$now" ] && [[ "$MATCHED_KEY" != "$RUNNER_OS-universal-libs-v3-"* ]]; then
+            echo "libs=true" >> $GITHUB_OUTPUT
+            echo "Restored an old cache format ($MATCHED_KEY), cache will be saved."
           else
             echo "Libraries unchanged."
           fi
+        env:
+          MATCHED_KEY: ${{ steps.libs_cache.outputs.cache-matched-key }}
 
       - name: Save Libraries cache.
-        if: always() && steps.cache_changes.outputs.libs == 'true'
+        # Библиотеки у обоих джобов одинаковые, сохраняет только arm64, чтобы
+        # не заливать один и тот же кэш дважды.
+        if: always() && matrix.arch == 'arm64' && steps.cache_changes.outputs.libs == 'true'
         uses: actions/cache/save@v4
         with:
           path: |
             Libraries
             ThirdParty
-          key: ${{ runner.os }}-universal-libs-v2-${{ env.CACHE_KEY }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ${{ runner.os }}-universal-libs-v3-${{ env.CACHE_KEY }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: ccache cache.
         if: env.USE_CCACHE == 'true'
         uses: actions/cache/restore@v4
         with:
           path: .ccache
-          key: ${{ runner.os }}-ccache-xcode${{ env.XCODE_VERSION }}-${{ github.run_id }}
+          key: ${{ runner.os }}-ccache-${{ matrix.arch }}-xcode${{ env.XCODE_VERSION }}-${{ github.run_id }}
           restore-keys: |
-            ${{ runner.os }}-ccache-xcode${{ env.XCODE_VERSION }}-
+            ${{ runner.os }}-ccache-${{ matrix.arch }}-xcode${{ env.XCODE_VERSION }}-
 
       - name: Set up ccache.
         # Xcode-генератор не поддерживает CMAKE_<LANG>_COMPILER_LAUNCHER,
@@ -175,7 +208,7 @@ jobs:
           mkdir -p "$CCACHE_DIR"
           cat > "$CCACHE_DIR/ccache.conf" <<EOF
           base_dir = $GITHUB_WORKSPACE
-          max_size = 2G
+          max_size = 3G
           compression = true
           depend_mode = true
           file_clone = true
@@ -222,6 +255,8 @@ jobs:
           -D DESKTOP_APP_DISABLE_SWIFT6=ON \
           -D TDESKTOP_API_ID=$TDESKTOP_API_ID \
           -D TDESKTOP_API_HASH=$TDESKTOP_API_HASH \
+          -D "CMAKE_OSX_ARCHITECTURES=${{ matrix.osx_architectures }}" \
+          -D DESKTOP_APP_MAC_ARCH=${{ matrix.mac_arch }} \
           $CCACHE_FLAGS
 
           cmake --build ../out --config Release --parallel
@@ -235,7 +270,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .ccache
-          key: ${{ runner.os }}-ccache-xcode${{ env.XCODE_VERSION }}-${{ github.run_id }}
+          key: ${{ runner.os }}-ccache-${{ matrix.arch }}-xcode${{ env.XCODE_VERSION }}-${{ github.run_id }}
 
       - name: Package artifact.
         run: |
@@ -250,17 +285,17 @@ jobs:
           lipo -info artifact/Voxgram.app/Contents/MacOS/* || true
 
           cd artifact
-          tar -cJf "voxgram-macos-universal.tar.xz" Voxgram.app Updater 2>/dev/null || tar -cJf "voxgram-macos-universal.tar.xz" Voxgram.app
+          tar -cJf "voxgram-macos-${{ matrix.arch }}.tar.xz" Voxgram.app Updater 2>/dev/null || tar -cJf "voxgram-macos-${{ matrix.arch }}.tar.xz" Voxgram.app
 
       - uses: actions/upload-artifact@v4
         name: Upload artifact.
         with:
-          name: voxgram-macos-universal
-          path: ${{ env.REPO_NAME }}/out/Release/artifact/voxgram-macos-universal.tar.xz
+          name: voxgram-macos-${{ matrix.arch }}
+          path: ${{ env.REPO_NAME }}/out/Release/artifact/voxgram-macos-${{ matrix.arch }}.tar.xz
           retention-days: 30
 
       - name: Attach to release.
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.REPO_NAME }}/out/Release/artifact/voxgram-macos-universal.tar.xz
+          files: ${{ env.REPO_NAME }}/out/Release/artifact/voxgram-macos-${{ matrix.arch }}.tar.xz
