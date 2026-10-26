@@ -720,7 +720,6 @@ void BuildSystemIntegrationSection(SectionBuilder &builder) {
 	builder.addSkip();
 }
 
-#ifdef DESKTOP_APP_USE_ANGLE
 #ifdef Q_OS_MAC
 void BuildTouchBarSection(SectionBuilder &builder) {
 	using TouchBar::Option;
@@ -786,6 +785,7 @@ void BuildTouchBarSection(SectionBuilder &builder) {
 }
 #endif // Q_OS_MAC
 
+#ifdef DESKTOP_APP_USE_ANGLE
 void BuildANGLEOption(SectionBuilder &builder) {
 	const auto controller = builder.controller();
 	using ANGLE = Ui::GL::ANGLE;
