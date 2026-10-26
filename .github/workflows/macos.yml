@@ -195,8 +195,11 @@ jobs:
         with:
           path: .ccache
           key: ${{ runner.os }}-ccache-${{ matrix.arch }}-xcode${{ env.XCODE_VERSION }}-${{ github.run_id }}
+          # Последний ключ — кэш прежней universal-сборки: в нём объектники
+          # под обе архитектуры, так что per-arch сборка тоже из него берёт.
           restore-keys: |
             ${{ runner.os }}-ccache-${{ matrix.arch }}-xcode${{ env.XCODE_VERSION }}-
+            ${{ runner.os }}-ccache-xcode${{ env.XCODE_VERSION }}-
 
       - name: Set up ccache.
         # Xcode-генератор не поддерживает CMAKE_<LANG>_COMPILER_LAUNCHER,
